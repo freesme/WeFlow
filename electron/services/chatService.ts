@@ -343,9 +343,17 @@ class ChatService {
           wcdbService.getAvatarUrls(missing)
         ])
 
+        // 收集没有头像 URL 的用户名
+        const missingAvatars: string[] = []
+
         for (const username of missing) {
           const displayName = displayNames.success && displayNames.map ? displayNames.map[username] : undefined
-          const avatarUrl = avatarUrls.success && avatarUrls.map ? avatarUrls.map[username] : undefined
+          let avatarUrl = avatarUrls.success && avatarUrls.map ? avatarUrls.map[username] : undefined
+
+          // 如果没有头像 URL，记录下来稍后从 head_image.db 获取
+          if (!avatarUrl) {
+            missingAvatars.push(username)
+          }
 
           const cacheEntry: ContactCacheEntry = {
             displayName: displayName || username,
@@ -357,6 +365,23 @@ class ChatService {
           this.avatarCache.set(username, cacheEntry)
           updatedEntries[username] = cacheEntry
         }
+
+        // 从 head_image.db 获取缺失的头像
+        if (missingAvatars.length > 0) {
+          const headImageAvatars = await this.getAvatarsFromHeadImageDb(missingAvatars)
+          for (const username of missingAvatars) {
+            const avatarUrl = headImageAvatars[username]
+            if (avatarUrl) {
+              result[username].avatarUrl = avatarUrl
+              const cached = this.avatarCache.get(username)
+              if (cached) {
+                cached.avatarUrl = avatarUrl
+                updatedEntries[username] = cached
+              }
+            }
+          }
+        }
+
         if (Object.keys(updatedEntries).length > 0) {
           this.contactCacheService.setEntries(updatedEntries)
         }
@@ -366,6 +391,86 @@ class ChatService {
       console.error('ChatService: 补充联系人信息失败:', e)
       return { success: false, error: String(e) }
     }
+  }
+
+  /**
+   * 从 head_image.db 批量获取头像（转换为 base64 data URL）
+   */
+  private async getAvatarsFromHeadImageDb(usernames: string[]): Promise<Record<string, string>> {
+    const result: Record<string, string> = {}
+    if (usernames.length === 0) return result
+
+    try {
+      const dbPath = this.configService.get('dbPath')
+      const wxid = this.configService.get('myWxid')
+      if (!dbPath || !wxid) {
+        console.log('[头像加载] 配置缺失，无法加载头像', { dbPath: !!dbPath, wxid: !!wxid })
+        return result
+      }
+
+      // 使用 resolveAccountDir 获取正确的账号目录
+      const accountDir = this.resolveAccountDir(dbPath, wxid)
+      if (!accountDir) {
+        console.log('[头像加载] 无法解析账号目录', { dbPath, wxid })
+        return result
+      }
+
+      // head_image.db 可能在账号目录下或 db_storage 子目录下
+      const headImageDbPaths = [
+        join(accountDir, 'head_image.db'),
+        join(accountDir, 'db_storage', 'head_image.db')
+      ]
+
+      let headImageDbPath: string | null = null
+      for (const path of headImageDbPaths) {
+        if (existsSync(path)) {
+          headImageDbPath = path
+          break
+        }
+      }
+
+      if (!headImageDbPath) {
+        console.log('[头像加载] 未找到 head_image.db', { 
+          accountDir, 
+          checkedPaths: headImageDbPaths 
+        })
+        return result
+      }
+
+      console.log(`[头像加载] 使用数据库: ${headImageDbPath}，查询 ${usernames.length} 个用户`)
+
+      const Database = require('better-sqlite3')
+      const db = new Database(headImageDbPath, { readonly: true })
+
+      try {
+        const stmt = db.prepare('SELECT username, image_buffer FROM head_image WHERE username = ?')
+        
+        for (const username of usernames) {
+          try {
+            const row = stmt.get(username) as any
+            if (row && row.image_buffer) {
+              const buffer = Buffer.from(row.image_buffer)
+              const base64 = buffer.toString('base64')
+              result[username] = `data:image/jpeg;base64,${base64}`
+            } else {
+              // 只输出没有找到头像的
+              console.log(`[头像加载] 未找到头像: ${username}`, { 
+                hasRow: !!row, 
+                hasBuffer: row ? !!row.image_buffer : false 
+              })
+            }
+          } catch (e) {
+            console.error(`[头像加载] 查询失败: ${username}`, e)
+          }
+        }
+      } finally {
+        db.close()
+      }
+    } catch (e) {
+      console.error('从 head_image.db 获取头像失败:', e)
+    }
+
+    return result
   }
 
   /**
