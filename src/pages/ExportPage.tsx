@@ -165,6 +165,19 @@ function ExportPage() {
   }, [loadSessions, loadExportPath, loadExportDefaults])
 
   useEffect(() => {
+    const handleChange = () => {
+      setSelectedSessions(new Set())
+      setSearchKeyword('')
+      setExportResult(null)
+      setSessions([])
+      setFilteredSessions([])
+      loadSessions()
+    }
+    window.addEventListener('wxid-changed', handleChange as EventListener)
+    return () => window.removeEventListener('wxid-changed', handleChange as EventListener)
+  }, [loadSessions])
+
+  useEffect(() => {
     const removeListener = window.electronAPI.export.onProgress?.((payload) => {
       setExportProgress({
         current: payload.current,

@@ -269,15 +269,14 @@ function WelcomePage({ standalone = false }: WelcomePageProps) {
       await configService.setDecryptKey(decryptKey)
       await configService.setMyWxid(wxid)
       await configService.setCachePath(cachePath)
-      if (imageXorKey) {
-        const parsed = parseInt(imageXorKey.replace(/^0x/i, ''), 16)
-        if (!Number.isNaN(parsed)) {
-          await configService.setImageXorKey(parsed)
-        }
-      }
-      if (imageAesKey) {
-        await configService.setImageAesKey(imageAesKey)
-      }
+      const parsedXorKey = imageXorKey ? parseInt(imageXorKey.replace(/^0x/i, ''), 16) : null
+      await configService.setImageXorKey(typeof parsedXorKey === 'number' && !Number.isNaN(parsedXorKey) ? parsedXorKey : 0)
+      await configService.setImageAesKey(imageAesKey || '')
+      await configService.setWxidConfig(wxid, {
+        decryptKey,
+        imageXorKey: typeof parsedXorKey === 'number' && !Number.isNaN(parsedXorKey) ? parsedXorKey : 0,
+        imageAesKey
+      })
       await configService.setOnboardingDone(true)
 
       setDbConnected(true, dbPath)
