@@ -673,6 +673,10 @@ function registerIpcHandlers() {
     return chatService.getMessageById(sessionId, localId)
   })
 
+  ipcMain.handle('chat:execQuery', async (_, kind: string, path: string | null, sql: string) => {
+    return chatService.execQuery(kind, path, sql)
+  })
+
   ipcMain.handle('sns:getTimeline', async (_, limit: number, offset: number, usernames?: string[], keyword?: string, startTime?: number, endTime?: number) => {
     return snsService.getTimeline(limit, offset, usernames, keyword, startTime, endTime)
   })

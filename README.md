@@ -25,16 +25,22 @@ WeFlow 是一个**完全本地**的微信**实时**聊天记录查看、分析�
 </a>
 </p>
 
+
 > [!TIP]
 > 如果导出聊天记录后，想深入分析聊天内容可以试试 [ChatLab](https://chatlab.fun/)
+
+> [!TIP]
+> 仅支持微信 **4.0** 及以上版本
 
 # 加入微信交流群
 
 > 🎉 扫码加入微信群，与其他 WeFlow 用户一起交流问题和使用心得。
 
 <p align="center">
-  <img src="2wm.png" alt="WeFlow 微信交流群二维码" width="220">
+  <img src="2wm.png" alt="WeFlow 微信交流群二维码（一群）" width="220" style="margin-right: 16px;">
+  <img src="3wm.png" alt="WeFlow 微信交流群二维码（二群）" width="220">
 </p>
+<p align="center">一群满了加二群</p>
 
 ## 主要功能
 

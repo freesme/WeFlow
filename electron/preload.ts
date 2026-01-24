@@ -118,7 +118,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
       const listener = (_: any, payload: { msgId: string; text: string }) => callback(payload)
       ipcRenderer.on('chat:voiceTranscriptPartial', listener)
       return () => ipcRenderer.removeListener('chat:voiceTranscriptPartial', listener)
-    }
+    },
+    execQuery: (kind: string, path: string | null, sql: string) =>
+      ipcRenderer.invoke('chat:execQuery', kind, path, sql)
   },
 
 

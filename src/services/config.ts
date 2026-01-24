@@ -28,7 +28,8 @@ export const CONFIG_KEYS = {
   EXPORT_DEFAULT_DATE_RANGE: 'exportDefaultDateRange',
   EXPORT_DEFAULT_MEDIA: 'exportDefaultMedia',
   EXPORT_DEFAULT_VOICE_AS_TEXT: 'exportDefaultVoiceAsText',
-  EXPORT_DEFAULT_EXCEL_COMPACT_COLUMNS: 'exportDefaultExcelCompactColumns'
+  EXPORT_DEFAULT_EXCEL_COMPACT_COLUMNS: 'exportDefaultExcelCompactColumns',
+  EXPORT_DEFAULT_TXT_COLUMNS: 'exportDefaultTxtColumns'
 } as const
 
 export interface WxidConfig {
@@ -339,4 +340,15 @@ export async function getExportDefaultExcelCompactColumns(): Promise<boolean | n
 // 设置导出默认 Excel 列模式
 export async function setExportDefaultExcelCompactColumns(enabled: boolean): Promise<void> {
   await config.set(CONFIG_KEYS.EXPORT_DEFAULT_EXCEL_COMPACT_COLUMNS, enabled)
+}
+
+// 获取导出默认 TXT 列配置
+export async function getExportDefaultTxtColumns(): Promise<string[] | null> {
+  const value = await config.get(CONFIG_KEYS.EXPORT_DEFAULT_TXT_COLUMNS)
+  return Array.isArray(value) ? (value as string[]) : null
+}
+
+// 设置导出默认 TXT 列配置
+export async function setExportDefaultTxtColumns(columns: string[]): Promise<void> {
+  await config.set(CONFIG_KEYS.EXPORT_DEFAULT_TXT_COLUMNS, columns)
 }

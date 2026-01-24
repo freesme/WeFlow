@@ -39,13 +39,23 @@ jobs:
           npx tsc
           npx vite build
 
-      - name: Inject Configuration
-        shell: bash
-        run: |
-          npm pkg set build.releaseInfo.releaseNotes=$'仅适配微信 4.0 及以上版本\n\n修复了一些已知问题\n\n详情前往 Telegram 群查看'
-
       - name: Package and Publish
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           npx electron-builder --publish always
+
+      - name: Update Release Notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          cat <<EOF > release_notes.md
+          ## 更新日志
+          修复了一些已知问题
+
+          ## 加入我们的群
+          [点击加入 Telegram 群](https://t.me/+hn3QzNc4DbA0MzNl)
+          EOF
+          
+          gh release edit "$GITHUB_REF_NAME" --notes-file release_notes.md

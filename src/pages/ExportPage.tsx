@@ -22,6 +22,7 @@ interface ExportOptions {
   exportEmojis: boolean
   exportVoiceAsText: boolean
   excelCompactColumns: boolean
+  txtColumns: string[]
 }
 
 interface ExportResult {
@@ -34,6 +35,7 @@ interface ExportResult {
 type SessionLayout = 'shared' | 'per-session'
 
 function ExportPage() {
+  const defaultTxtColumns = ['index', 'time', 'senderRole', 'messageType', 'content']
   const [sessions, setSessions] = useState<ChatSession[]>([])
   const [filteredSessions, setFilteredSessions] = useState<ChatSession[]>([])
   const [selectedSessions, setSelectedSessions] = useState<Set<string>>(new Set())
@@ -61,7 +63,8 @@ function ExportPage() {
     exportVoices: true,
     exportEmojis: true,
     exportVoiceAsText: true,
-    excelCompactColumns: true
+    excelCompactColumns: true,
+    txtColumns: defaultTxtColumns
   })
 
   const buildDateRangeFromPreset = (preset: string) => {
@@ -125,17 +128,20 @@ function ExportPage() {
         savedRange,
         savedMedia,
         savedVoiceAsText,
-        savedExcelCompactColumns
+        savedExcelCompactColumns,
+        savedTxtColumns
       ] = await Promise.all([
         configService.getExportDefaultFormat(),
         configService.getExportDefaultDateRange(),
         configService.getExportDefaultMedia(),
         configService.getExportDefaultVoiceAsText(),
-        configService.getExportDefaultExcelCompactColumns()
+        configService.getExportDefaultExcelCompactColumns(),
+        configService.getExportDefaultTxtColumns()
       ])
 
       const preset = savedRange || 'today'
       const rangeDefaults = buildDateRangeFromPreset(preset)
+      const txtColumns = savedTxtColumns && savedTxtColumns.length > 0 ? savedTxtColumns : defaultTxtColumns
 
       setOptions((prev) => ({
         ...prev,
@@ -144,7 +150,8 @@ function ExportPage() {
         dateRange: rangeDefaults.dateRange,
         exportMedia: savedMedia ?? false,
         exportVoiceAsText: savedVoiceAsText ?? true,
-        excelCompactColumns: savedExcelCompactColumns ?? true
+        excelCompactColumns: savedExcelCompactColumns ?? true,
+        txtColumns
       }))
     } catch (e) {
       console.error('加载导出默认设置失败:', e)
@@ -222,6 +229,23 @@ function ExportPage() {
     return date.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
   }
 
+  const handleFormatChange = (format: ExportOptions['format']) => {
+    setOptions((prev) => {
+      const next = { ...prev, format }
+      if (format === 'html') {
+        return {
+          ...next,
+          exportMedia: true,
+          exportImages: true,
+          exportVoices: true,
+          exportEmojis: true,
+          exportVoiceAsText: true
+        }
+      }
+      return next
+    })
+  }
+
   const openExportFolder = async () => {
     if (exportFolder) {
       await window.electronAPI.shell.openPath(exportFolder)
@@ -246,6 +270,7 @@ function ExportPage() {
         exportEmojis: options.exportMedia && options.exportEmojis,
         exportVoiceAsText: options.exportVoiceAsText,  // 即使不导出媒体，也可以导出语音转文字内容
         excelCompactColumns: options.excelCompactColumns,
+        txtColumns: options.txtColumns,
         sessionLayout,
         dateRange: options.useAllTime ? null : options.dateRange ? {
           start: Math.floor(options.dateRange.start.getTime() / 1000),
@@ -254,7 +279,7 @@ function ExportPage() {
         } : null
       }
 
-      if (options.format === 'chatlab' || options.format === 'chatlab-jsonl' || options.format === 'json' || options.format === 'excel') {
+      if (options.format === 'chatlab' || options.format === 'chatlab-jsonl' || options.format === 'json' || options.format === 'excel' || options.format === 'txt' || options.format === 'html') {
         const result = await window.electronAPI.export.exportSessions(
           sessionList,
           exportFolder,
@@ -460,7 +485,7 @@ function ExportPage() {
                 <div
                   key={fmt.value}
                   className={`format-card ${options.format === fmt.value ? 'active' : ''}`}
-                  onClick={() => setOptions({ ...options, format: fmt.value as any })}
+                  onClick={() => handleFormatChange(fmt.value as ExportOptions['format'])}
                 >
                   <fmt.icon size={24} />
                   <span className="format-label">{fmt.label}</span>

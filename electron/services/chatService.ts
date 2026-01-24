@@ -3384,6 +3384,19 @@ class ChatService {
     }
     return parsed
   }
+
+  async execQuery(kind: string, path: string | null, sql: string): Promise<{ success: boolean; rows?: any[]; error?: string }> {
+    try {
+      const connectResult = await this.ensureConnected()
+      if (!connectResult.success) {
+        return { success: false, error: connectResult.error || '数据库未连接' }
+      }
+      return wcdbService.execQuery(kind, path, sql)
+    } catch (e) {
+      console.error('ChatService: 执行自定义查询失败:', e)
+      return { success: false, error: String(e) }
+    }
+  }
 }
 
 export const chatService = new ChatService()
