@@ -7,12 +7,13 @@ import { dialog } from '../services/ipc'
 import * as configService from '../services/config'
 import {
   Eye, EyeOff, FolderSearch, FolderOpen, Search, Copy,
-  RotateCcw, Trash2, Save, Plug, Check, Sun, Moon,
-  Palette, Database, Download, HardDrive, Info, RefreshCw, ChevronDown, Mic
+  RotateCcw, Trash2, Plug, Check, Sun, Moon,
+  Palette, Database, Download, HardDrive, Info, RefreshCw, ChevronDown, Mic,
+  ShieldCheck, Fingerprint, Lock, KeyRound
 } from 'lucide-react'
 import './SettingsPage.scss'
 
-type SettingsTab = 'appearance' | 'database' | 'whisper' | 'export' | 'cache' | 'about'
+type SettingsTab = 'appearance' | 'database' | 'whisper' | 'export' | 'cache' | 'security' | 'about'
 
 const tabs: { id: SettingsTab; label: string; icon: React.ElementType }[] = [
   { id: 'appearance', label: '外观', icon: Palette },
@@ -20,6 +21,7 @@ const tabs: { id: SettingsTab; label: string; icon: React.ElementType }[] = [
   { id: 'whisper', label: '语音识别模型', icon: Mic },
   { id: 'export', label: '导出', icon: Download },
   { id: 'cache', label: '缓存', icon: HardDrive },
+  { id: 'security', label: '安全', icon: ShieldCheck },
   { id: 'about', label: '关于', icon: Info }
 ]
 
@@ -29,7 +31,22 @@ interface WxidOption {
 }
 
 function SettingsPage() {
-  const { isDbConnected, setDbConnected, setLoading, reset } = useAppStore()
+  const {
+    isDbConnected,
+    setDbConnected,
+    setLoading,
+    reset,
+    updateInfo,
+    setUpdateInfo,
+    isDownloading,
+    setIsDownloading,
+    downloadProgress,
+    setDownloadProgress,
+    showUpdateDialog,
+    setShowUpdateDialog,
+    setUpdateError
+  } = useAppStore()
+
   const resetChatStore = useChatStore((state) => state.reset)
   const { currentTheme, themeMode, setTheme, setThemeMode } = useThemeStore()
   const clearAnalyticsStoreCache = useAnalyticsStore((state) => state.clearCache)
@@ -62,6 +79,7 @@ function SettingsPage() {
   const [exportDefaultMedia, setExportDefaultMedia] = useState(false)
   const [exportDefaultVoiceAsText, setExportDefaultVoiceAsText] = useState(true)
   const [exportDefaultExcelCompactColumns, setExportDefaultExcelCompactColumns] = useState(true)
+  const [exportDefaultConcurrency, setExportDefaultConcurrency] = useState(2)
 
   const [isLoading, setIsLoadingState] = useState(false)
   const [isTesting, setIsTesting] = useState(false)
@@ -69,10 +87,7 @@ function SettingsPage() {
   const [isFetchingDbKey, setIsFetchingDbKey] = useState(false)
   const [isFetchingImageKey, setIsFetchingImageKey] = useState(false)
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false)
-  const [isDownloading, setIsDownloading] = useState(false)
-  const [downloadProgress, setDownloadProgress] = useState(0)
   const [appVersion, setAppVersion] = useState('')
-  const [updateInfo, setUpdateInfo] = useState<{ hasUpdate: boolean; version?: string; releaseNotes?: string } | null>(null)
   const [message, setMessage] = useState<{ text: string; success: boolean } | null>(null)
   const [showDecryptKey, setShowDecryptKey] = useState(false)
   const [dbKeyStatus, setDbKeyStatus] = useState('')
@@ -82,7 +97,30 @@ function SettingsPage() {
   const [isClearingImageCache, setIsClearingImageCache] = useState(false)
   const [isClearingAllCache, setIsClearingAllCache] = useState(false)
 
+  // 安全设置 state
+  const [authEnabled, setAuthEnabled] = useState(false)
+  const [authUseHello, setAuthUseHello] = useState(false)
+  const [helloAvailable, setHelloAvailable] = useState(false)
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [isSettingHello, setIsSettingHello] = useState(false)
+
   const isClearingCache = isClearingAnalyticsCache || isClearingImageCache || isClearingAllCache
+
+  // 检查 Hello 可用性
+  useEffect(() => {
+    if (window.PublicKeyCredential) {
+      void PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().then(setHelloAvailable)
+    }
+  }, [])
+
+  async function sha256(message: string) {
+    const msgBuffer = new TextEncoder().encode(message)
+    const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer)
+    const hashArray = Array.from(new Uint8Array(hashBuffer))
+    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+    return hashHex
+  }
 
   useEffect(() => {
     loadConfig()
@@ -139,6 +177,12 @@ function SettingsPage() {
       const savedExportDefaultMedia = await configService.getExportDefaultMedia()
       const savedExportDefaultVoiceAsText = await configService.getExportDefaultVoiceAsText()
       const savedExportDefaultExcelCompactColumns = await configService.getExportDefaultExcelCompactColumns()
+      const savedExportDefaultConcurrency = await configService.getExportDefaultConcurrency()
+
+      const savedAuthEnabled = await configService.getAuthEnabled()
+      const savedAuthUseHello = await configService.getAuthUseHello()
+      setAuthEnabled(savedAuthEnabled)
+      setAuthUseHello(savedAuthUseHello)
 
       if (savedPath) setDbPath(savedPath)
       if (savedWxid) setWxid(savedWxid)
@@ -166,6 +210,7 @@ function SettingsPage() {
       setExportDefaultMedia(savedExportDefaultMedia ?? false)
       setExportDefaultVoiceAsText(savedExportDefaultVoiceAsText ?? true)
       setExportDefaultExcelCompactColumns(savedExportDefaultExcelCompactColumns ?? true)
+      setExportDefaultConcurrency(savedExportDefaultConcurrency ?? 2)
 
       // 如果语言列表为空，保存默认值
       if (!savedTranscribeLanguages || savedTranscribeLanguages.length === 0) {
@@ -176,7 +221,7 @@ function SettingsPage() {
 
 
       if (savedWhisperModelDir) setWhisperModelDir(savedWhisperModelDir)
-    } catch (e) {
+    } catch (e: any) {
       console.error('加载配置失败:', e)
     }
   }
@@ -202,14 +247,14 @@ function SettingsPage() {
     try {
       const version = await window.electronAPI.app.getVersion()
       setAppVersion(version)
-    } catch (e) {
+    } catch (e: any) {
       console.error('获取版本号失败:', e)
     }
   }
 
   // 监听下载进度
   useEffect(() => {
-    const removeListener = window.electronAPI.app.onDownloadProgress?.((progress: number) => {
+    const removeListener = window.electronAPI.app.onDownloadProgress?.((progress: any) => {
       setDownloadProgress(progress)
     })
     return () => removeListener?.()
@@ -229,17 +274,19 @@ function SettingsPage() {
   }, [whisperModelDir])
 
   const handleCheckUpdate = async () => {
+    if (isCheckingUpdate) return
     setIsCheckingUpdate(true)
     setUpdateInfo(null)
     try {
       const result = await window.electronAPI.app.checkForUpdates()
       if (result.hasUpdate) {
         setUpdateInfo(result)
+        setShowUpdateDialog(true)
         showMessage(`发现新版：${result.version}`, true)
       } else {
         showMessage('当前已是最新版', true)
       }
-    } catch (e) {
+    } catch (e: any) {
       showMessage(`检查更新失败: ${e}`, false)
     } finally {
       setIsCheckingUpdate(false)
@@ -247,16 +294,20 @@ function SettingsPage() {
   }
 
   const handleUpdateNow = async () => {
+    setShowUpdateDialog(false)
+
     setIsDownloading(true)
-    setDownloadProgress(0)
+    setDownloadProgress({ percent: 0 })
     try {
       showMessage('正在下载更新...', true)
       await window.electronAPI.app.downloadAndInstall()
-    } catch (e) {
+    } catch (e: any) {
       showMessage(`更新失败: ${e}`, false)
       setIsDownloading(false)
     }
   }
+
+
 
   const showMessage = (text: string, success: boolean) => {
     setMessage({ text, success })
@@ -345,7 +396,7 @@ function SettingsPage() {
         if (!result.success && result.error) {
           showMessage(result.error, false)
         }
-      } catch (e) {
+      } catch (e: any) {
         showMessage(`切换账号后重新连接失败: ${e}`, false)
         setDbConnected(false)
       }
@@ -382,7 +433,7 @@ function SettingsPage() {
       } else {
         showMessage(result.error || '未能自动检测到数据库目录', false)
       }
-    } catch (e) {
+    } catch (e: any) {
       showMessage(`自动检测失败: ${e}`, false)
     } finally {
       setIsDetectingPath(false)
@@ -396,7 +447,7 @@ function SettingsPage() {
         setDbPath(result.filePaths[0])
         showMessage('已选择数据库目录', true)
       }
-    } catch (e) {
+    } catch (e: any) {
       showMessage('选择目录失败', false)
     }
   }
@@ -424,7 +475,7 @@ function SettingsPage() {
       } else {
         if (!silent) showMessage('未检测到账号目录，请检查路径', false)
       }
-    } catch (e) {
+    } catch (e: any) {
       if (!silent) showMessage(`扫描失败: ${e}`, false)
     }
   }
@@ -440,7 +491,7 @@ function SettingsPage() {
         setCachePath(result.filePaths[0])
         showMessage('已选择缓存目录', true)
       }
-    } catch (e) {
+    } catch (e: any) {
       showMessage('选择目录失败', false)
     }
   }
@@ -456,7 +507,7 @@ function SettingsPage() {
         await configService.setWhisperModelDir(dir)
         showMessage('已选择 Whisper 模型目录', true)
       }
-    } catch (e) {
+    } catch (e: any) {
       showMessage('选择目录失败', false)
     }
   }
@@ -480,7 +531,7 @@ function SettingsPage() {
       } else {
         showMessage(result.error || '模型下载失败', false)
       }
-    } catch (e) {
+    } catch (e: any) {
       showMessage(`模型下载失败: ${e}`, false)
     } finally {
       setIsWhisperDownloading(false)
@@ -512,7 +563,7 @@ function SettingsPage() {
           showMessage(result.error || '自动获取密钥失败', false)
         }
       }
-    } catch (e) {
+    } catch (e: any) {
       showMessage(`自动获取密钥失败: ${e}`, false)
     } finally {
       setIsFetchingDbKey(false)
@@ -522,6 +573,19 @@ function SettingsPage() {
   const handleManualConfirm = async () => {
     setIsManualStartPrompt(false)
     handleAutoGetDbKey()
+  }
+
+  // Helper to sync current keys to wxid config
+  const syncCurrentKeys = async () => {
+    const keys = buildKeysFromState()
+    await syncKeysToConfig(keys)
+    if (wxid) {
+      await configService.setWxidConfig(wxid, {
+        decryptKey: keys.decryptKey,
+        imageXorKey: typeof keys.imageXorKey === 'number' ? keys.imageXorKey : 0,
+        imageAesKey: keys.imageAesKey
+      })
+    }
   }
 
   const handleAutoGetImageKey = async () => {
@@ -542,10 +606,27 @@ function SettingsPage() {
         setImageAesKey(result.aesKey)
         setImageKeyStatus('已获取图片密钥')
         showMessage('已自动获取图片密钥', true)
+
+        // Auto-save after fetching keys
+        // We need to use the values directly because state updates are async
+        const newXorKey = typeof result.xorKey === 'number' ? result.xorKey : 0
+        const newAesKey = result.aesKey
+
+        await configService.setImageXorKey(newXorKey)
+        await configService.setImageAesKey(newAesKey)
+
+        if (wxid) {
+          await configService.setWxidConfig(wxid, {
+            decryptKey: decryptKey, // use current state as it hasn't changed here
+            imageXorKey: newXorKey,
+            imageAesKey: newAesKey
+          })
+        }
+
       } else {
         showMessage(result.error || '自动获取图片密钥失败', false)
       }
-    } catch (e) {
+    } catch (e: any) {
       showMessage(`自动获取图片密钥失败: ${e}`, false)
     } finally {
       setIsFetchingImageKey(false)
@@ -568,49 +649,15 @@ function SettingsPage() {
       } else {
         showMessage(result.error || '连接测试失败', false)
       }
-    } catch (e) {
+    } catch (e: any) {
       showMessage(`连接测试失败: ${e}`, false)
     } finally {
       setIsTesting(false)
     }
   }
 
-  const handleSaveConfig = async () => {
-    if (!decryptKey) { showMessage('请输入解密密钥', false); return }
-    if (decryptKey.length !== 64) { showMessage('密钥长度必须为64个字符', false); return }
-    if (!dbPath) { showMessage('请选择数据库目录', false); return }
-    if (!wxid) { showMessage('请输入 wxid', false); return }
+  // Removed manual save config function
 
-    setIsLoadingState(true)
-    setLoading(true, '正在保存配置...')
-
-    try {
-      await configService.setDecryptKey(decryptKey)
-      await configService.setDbPath(dbPath)
-      await configService.setMyWxid(wxid)
-      await configService.setCachePath(cachePath)
-      const parsedXorKey = parseImageXorKey(imageXorKey)
-      await configService.setImageXorKey(typeof parsedXorKey === 'number' ? parsedXorKey : 0)
-      await configService.setImageAesKey(imageAesKey || '')
-      await configService.setWxidConfig(wxid, {
-        decryptKey,
-        imageXorKey: typeof parsedXorKey === 'number' ? parsedXorKey : 0,
-        imageAesKey
-      })
-      await configService.setWhisperModelDir(whisperModelDir)
-      await configService.setAutoTranscribeVoice(autoTranscribeVoice)
-      await configService.setTranscribeLanguages(transcribeLanguages)
-      await configService.setOnboardingDone(true)
-
-      // 保存按钮只负责持久化配置，不做连接测试/重连，避免影响聊天页的活动连接
-      showMessage('配置保存成功', true)
-    } catch (e) {
-      showMessage(`保存配置失败: ${e}`, false)
-    } finally {
-      setIsLoadingState(false)
-      setLoading(false)
-    }
-  }
 
   const handleClearConfig = async () => {
     const confirmed = window.confirm('确定要清除当前配置吗？清除后需要重新完成首次配置？')
@@ -636,7 +683,7 @@ function SettingsPage() {
       setIsWhisperDownloading(false)
       setDbConnected(false)
       await window.electronAPI.window.openOnboardingWindow()
-    } catch (e) {
+    } catch (e: any) {
       showMessage(`清除配置失败: ${e}`, false)
     } finally {
       setIsLoadingState(false)
@@ -648,7 +695,7 @@ function SettingsPage() {
     try {
       const logPath = await window.electronAPI.log.getPath()
       await window.electronAPI.shell.openPath(logPath)
-    } catch (e) {
+    } catch (e: any) {
       showMessage(`打开日志失败: ${e}`, false)
     }
   }
@@ -662,7 +709,7 @@ function SettingsPage() {
       }
       await navigator.clipboard.writeText(result.content || '')
       showMessage('日志已复制到剪贴板', true)
-    } catch (e) {
+    } catch (e: any) {
       showMessage(`复制日志失败: ${e}`, false)
     }
   }
@@ -678,7 +725,7 @@ function SettingsPage() {
       } else {
         showMessage(`清除分析缓存失败: ${result.error || '未知错误'}`, false)
       }
-    } catch (e) {
+    } catch (e: any) {
       showMessage(`清除分析缓存失败: ${e}`, false)
     } finally {
       setIsClearingAnalyticsCache(false)
@@ -695,7 +742,7 @@ function SettingsPage() {
       } else {
         showMessage(`清除图片缓存失败: ${result.error || '未知错误'}`, false)
       }
-    } catch (e) {
+    } catch (e: any) {
       showMessage(`清除图片缓存失败: ${e}`, false)
     } finally {
       setIsClearingImageCache(false)
@@ -713,7 +760,7 @@ function SettingsPage() {
       } else {
         showMessage(`清除所有缓存失败: ${result.error || '未知错误'}`, false)
       }
-    } catch (e) {
+    } catch (e: any) {
       showMessage(`清除所有缓存失败: ${e}`, false)
     } finally {
       setIsClearingAllCache(false)
@@ -753,7 +800,18 @@ function SettingsPage() {
         <label>解密密钥</label>
         <span className="form-hint">64位十六进制密钥</span>
         <div className="input-with-toggle">
-          <input type={showDecryptKey ? 'text' : 'password'} placeholder="例如: a1b2c3d4e5f6..." value={decryptKey} onChange={(e) => setDecryptKey(e.target.value)} />
+          <input
+            type={showDecryptKey ? 'text' : 'password'}
+            placeholder="例如: a1b2c3d4e5f6..."
+            value={decryptKey}
+            onChange={(e) => setDecryptKey(e.target.value)}
+            onBlur={async () => {
+              if (decryptKey && decryptKey.length === 64) {
+                await syncCurrentKeys()
+                // showMessage('解密密钥已保存', true) 
+              }
+            }}
+          />
           <button type="button" className="toggle-visibility" onClick={() => setShowDecryptKey(!showDecryptKey)}>
             {showDecryptKey ? <EyeOff size={14} /> : <Eye size={14} />}
           </button>
@@ -776,8 +834,18 @@ function SettingsPage() {
       <div className="form-group">
         <label>数据库根目录</label>
         <span className="form-hint">xwechat_files 目录</span>
-        <span className="form-hint" style={{ color: '#ff6b6b' }}>⚠️ 目录路径不可包含中文，如有中文请去微信-设置-存储位置点击更改，迁移至全英文目录</span>
-        <input type="text" placeholder="例如: C:\Users\xxx\Documents\xwechat_files" value={dbPath} onChange={(e) => setDbPath(e.target.value)} />
+        <span className="form-hint" style={{ color: '#ff6b6b' }}> 目录路径不可包含中文，如有中文请去微信-设置-存储位置点击更改，迁移至全英文目录</span>
+        <input
+          type="text"
+          placeholder="例如: C:\Users\xxx\Documents\xwechat_files"
+          value={dbPath}
+          onChange={(e) => setDbPath(e.target.value)}
+          onBlur={async () => {
+            if (dbPath) {
+              await configService.setDbPath(dbPath)
+            }
+          }}
+        />
         <div className="btn-row">
           <button className="btn btn-primary" onClick={handleAutoDetectPath} disabled={isDetectingPath}>
             <FolderSearch size={16} /> {isDetectingPath ? '检测中...' : '自动检测'}
@@ -795,6 +863,12 @@ function SettingsPage() {
             placeholder="例如: wxid_xxxxxx"
             value={wxid}
             onChange={(e) => setWxid(e.target.value)}
+            onBlur={async () => {
+              if (wxid) {
+                await configService.setMyWxid(wxid)
+                await syncCurrentKeys() // Sync keys to the new wxid entry
+              }
+            }}
           />
         </div>
         <button className="btn btn-secondary btn-sm" onClick={() => handleScanWxid()}><Search size={14} /> 扫描 wxid</button>
@@ -803,13 +877,25 @@ function SettingsPage() {
       <div className="form-group">
         <label>图片 XOR 密钥 <span className="optional">(可选)</span></label>
         <span className="form-hint">用于解密图片缓存</span>
-        <input type="text" placeholder="例如: 0xA4" value={imageXorKey} onChange={(e) => setImageXorKey(e.target.value)} />
+        <input
+          type="text"
+          placeholder="例如: 0xA4"
+          value={imageXorKey}
+          onChange={(e) => setImageXorKey(e.target.value)}
+          onBlur={syncCurrentKeys}
+        />
       </div>
 
       <div className="form-group">
         <label>图片 AES 密钥 <span className="optional">(可选)</span></label>
         <span className="form-hint">16 位密钥</span>
-        <input type="text" placeholder="16 位 AES 密钥" value={imageAesKey} onChange={(e) => setImageAesKey(e.target.value)} />
+        <input
+          type="text"
+          placeholder="16 位 AES 密钥"
+          value={imageAesKey}
+          onChange={(e) => setImageAesKey(e.target.value)}
+          onBlur={syncCurrentKeys}
+        />
         <button className="btn btn-secondary btn-sm" onClick={handleAutoGetImageKey} disabled={isFetchingImageKey}>
           <Plug size={14} /> {isFetchingImageKey ? '获取中...' : '自动获取图片密钥'}
         </button>
@@ -989,171 +1075,171 @@ function SettingsPage() {
     const exportExcelColumnsLabel = getOptionLabel(exportExcelColumnOptions, exportExcelColumnsValue)
 
     return (
-    <div className="tab-content">
-      <div className="form-group">
-        <label>默认导出格式</label>
-        <span className="form-hint">导出页面默认选中的格式</span>
-        <div className="select-field" ref={exportFormatDropdownRef}>
-          <button
-            type="button"
-            className={`select-trigger ${showExportFormatSelect ? 'open' : ''}`}
-            onClick={() => {
-              setShowExportFormatSelect(!showExportFormatSelect)
-              setShowExportDateRangeSelect(false)
-              setShowExportExcelColumnsSelect(false)
-            }}
-          >
-            <span className="select-value">{exportFormatLabel}</span>
-            <ChevronDown size={16} />
-          </button>
-          {showExportFormatSelect && (
-            <div className="select-dropdown">
-              {exportFormatOptions.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  className={`select-option ${exportDefaultFormat === option.value ? 'active' : ''}`}
-                  onClick={async () => {
-                    setExportDefaultFormat(option.value)
-                    await configService.setExportDefaultFormat(option.value)
-                    showMessage('已更新导出格式默认值', true)
-                    setShowExportFormatSelect(false)
-                  }}
-                >
-                  <span className="option-label">{option.label}</span>
-                  {option.desc && <span className="option-desc">{option.desc}</span>}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="form-group">
-        <label>默认导出时间范围</label>
-        <span className="form-hint">控制导出页面的默认时间选择</span>
-        <div className="select-field" ref={exportDateRangeDropdownRef}>
-          <button
-            type="button"
-            className={`select-trigger ${showExportDateRangeSelect ? 'open' : ''}`}
-            onClick={() => {
-              setShowExportDateRangeSelect(!showExportDateRangeSelect)
-              setShowExportFormatSelect(false)
-              setShowExportExcelColumnsSelect(false)
-            }}
-          >
-            <span className="select-value">{exportDateRangeLabel}</span>
-            <ChevronDown size={16} />
-          </button>
-          {showExportDateRangeSelect && (
-            <div className="select-dropdown">
-              {exportDateRangeOptions.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  className={`select-option ${exportDefaultDateRange === option.value ? 'active' : ''}`}
-                  onClick={async () => {
-                    setExportDefaultDateRange(option.value)
-                    await configService.setExportDefaultDateRange(option.value)
-                    showMessage('已更新默认导出时间范围', true)
-                    setShowExportDateRangeSelect(false)
-                  }}
-                >
-                  <span className="option-label">{option.label}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="form-group">
-        <label>默认导出媒体文件</label>
-        <span className="form-hint">控制图片/语音/表情的默认导出开关</span>
-        <div className="log-toggle-line">
-          <span className="log-status">{exportDefaultMedia ? '已开启' : '已关闭'}</span>
-          <label className="switch" htmlFor="export-default-media">
-            <input
-              id="export-default-media"
-              className="switch-input"
-              type="checkbox"
-              checked={exportDefaultMedia}
-              onChange={async (e) => {
-                const enabled = e.target.checked
-                setExportDefaultMedia(enabled)
-                await configService.setExportDefaultMedia(enabled)
-                showMessage(enabled ? '已开启默认媒体导出' : '已关闭默认媒体导出', true)
+      <div className="tab-content">
+        <div className="form-group">
+          <label>默认导出格式</label>
+          <span className="form-hint">导出页面默认选中的格式</span>
+          <div className="select-field" ref={exportFormatDropdownRef}>
+            <button
+              type="button"
+              className={`select-trigger ${showExportFormatSelect ? 'open' : ''}`}
+              onClick={() => {
+                setShowExportFormatSelect(!showExportFormatSelect)
+                setShowExportDateRangeSelect(false)
+                setShowExportExcelColumnsSelect(false)
               }}
-            />
-            <span className="switch-slider" />
-          </label>
+            >
+              <span className="select-value">{exportFormatLabel}</span>
+              <ChevronDown size={16} />
+            </button>
+            {showExportFormatSelect && (
+              <div className="select-dropdown">
+                {exportFormatOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={`select-option ${exportDefaultFormat === option.value ? 'active' : ''}`}
+                    onClick={async () => {
+                      setExportDefaultFormat(option.value)
+                      await configService.setExportDefaultFormat(option.value)
+                      showMessage('已更新导出格式默认值', true)
+                      setShowExportFormatSelect(false)
+                    }}
+                  >
+                    <span className="option-label">{option.label}</span>
+                    {option.desc && <span className="option-desc">{option.desc}</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
 
-      <div className="form-group">
-        <label>默认语音转文字</label>
-        <span className="form-hint">导出时默认将语音转写为文字</span>
-        <div className="log-toggle-line">
-          <span className="log-status">{exportDefaultVoiceAsText ? '已开启' : '已关闭'}</span>
-          <label className="switch" htmlFor="export-default-voice-as-text">
-            <input
-              id="export-default-voice-as-text"
-              className="switch-input"
-              type="checkbox"
-              checked={exportDefaultVoiceAsText}
-              onChange={async (e) => {
-                const enabled = e.target.checked
-                setExportDefaultVoiceAsText(enabled)
-                await configService.setExportDefaultVoiceAsText(enabled)
-                showMessage(enabled ? '已开启默认语音转文字' : '已关闭默认语音转文字', true)
+        <div className="form-group">
+          <label>默认导出时间范围</label>
+          <span className="form-hint">控制导出页面的默认时间选择</span>
+          <div className="select-field" ref={exportDateRangeDropdownRef}>
+            <button
+              type="button"
+              className={`select-trigger ${showExportDateRangeSelect ? 'open' : ''}`}
+              onClick={() => {
+                setShowExportDateRangeSelect(!showExportDateRangeSelect)
+                setShowExportFormatSelect(false)
+                setShowExportExcelColumnsSelect(false)
               }}
-            />
-            <span className="switch-slider" />
-          </label>
+            >
+              <span className="select-value">{exportDateRangeLabel}</span>
+              <ChevronDown size={16} />
+            </button>
+            {showExportDateRangeSelect && (
+              <div className="select-dropdown">
+                {exportDateRangeOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={`select-option ${exportDefaultDateRange === option.value ? 'active' : ''}`}
+                    onClick={async () => {
+                      setExportDefaultDateRange(option.value)
+                      await configService.setExportDefaultDateRange(option.value)
+                      showMessage('已更新默认导出时间范围', true)
+                      setShowExportDateRangeSelect(false)
+                    }}
+                  >
+                    <span className="option-label">{option.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
 
-      <div className="form-group">
-        <label>Excel 列显示</label>
-        <span className="form-hint">控制 Excel 导出的列字段</span>
-        <div className="select-field" ref={exportExcelColumnsDropdownRef}>
-          <button
-            type="button"
-            className={`select-trigger ${showExportExcelColumnsSelect ? 'open' : ''}`}
-            onClick={() => {
-              setShowExportExcelColumnsSelect(!showExportExcelColumnsSelect)
-              setShowExportFormatSelect(false)
-              setShowExportDateRangeSelect(false)
-            }}
-          >
-            <span className="select-value">{exportExcelColumnsLabel}</span>
-            <ChevronDown size={16} />
-          </button>
-          {showExportExcelColumnsSelect && (
-            <div className="select-dropdown">
-              {exportExcelColumnOptions.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  className={`select-option ${exportExcelColumnsValue === option.value ? 'active' : ''}`}
-                  onClick={async () => {
-                    const compact = option.value === 'compact'
-                    setExportDefaultExcelCompactColumns(compact)
-                    await configService.setExportDefaultExcelCompactColumns(compact)
-                    showMessage(compact ? '已启用精简列' : '已启用完整列', true)
-                    setShowExportExcelColumnsSelect(false)
-                  }}
-                >
-                  <span className="option-label">{option.label}</span>
-                  {option.desc && <span className="option-desc">{option.desc}</span>}
-                </button>
-              ))}
-            </div>
-          )}
+        <div className="form-group">
+          <label>默认导出媒体文件</label>
+          <span className="form-hint">控制图片/语音/表情的默认导出开关</span>
+          <div className="log-toggle-line">
+            <span className="log-status">{exportDefaultMedia ? '已开启' : '已关闭'}</span>
+            <label className="switch" htmlFor="export-default-media">
+              <input
+                id="export-default-media"
+                className="switch-input"
+                type="checkbox"
+                checked={exportDefaultMedia}
+                onChange={async (e) => {
+                  const enabled = e.target.checked
+                  setExportDefaultMedia(enabled)
+                  await configService.setExportDefaultMedia(enabled)
+                  showMessage(enabled ? '已开启默认媒体导出' : '已关闭默认媒体导出', true)
+                }}
+              />
+              <span className="switch-slider" />
+            </label>
+          </div>
         </div>
-      </div>
 
-    </div>
+        <div className="form-group">
+          <label>默认语音转文字</label>
+          <span className="form-hint">导出时默认将语音转写为文字</span>
+          <div className="log-toggle-line">
+            <span className="log-status">{exportDefaultVoiceAsText ? '已开启' : '已关闭'}</span>
+            <label className="switch" htmlFor="export-default-voice-as-text">
+              <input
+                id="export-default-voice-as-text"
+                className="switch-input"
+                type="checkbox"
+                checked={exportDefaultVoiceAsText}
+                onChange={async (e) => {
+                  const enabled = e.target.checked
+                  setExportDefaultVoiceAsText(enabled)
+                  await configService.setExportDefaultVoiceAsText(enabled)
+                  showMessage(enabled ? '已开启默认语音转文字' : '已关闭默认语音转文字', true)
+                }}
+              />
+              <span className="switch-slider" />
+            </label>
+          </div>
+        </div>
+
+        <div className="form-group">
+          <label>Excel 列显示</label>
+          <span className="form-hint">控制 Excel 导出的列字段</span>
+          <div className="select-field" ref={exportExcelColumnsDropdownRef}>
+            <button
+              type="button"
+              className={`select-trigger ${showExportExcelColumnsSelect ? 'open' : ''}`}
+              onClick={() => {
+                setShowExportExcelColumnsSelect(!showExportExcelColumnsSelect)
+                setShowExportFormatSelect(false)
+                setShowExportDateRangeSelect(false)
+              }}
+            >
+              <span className="select-value">{exportExcelColumnsLabel}</span>
+              <ChevronDown size={16} />
+            </button>
+            {showExportExcelColumnsSelect && (
+              <div className="select-dropdown">
+                {exportExcelColumnOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={`select-option ${exportExcelColumnsValue === option.value ? 'active' : ''}`}
+                    onClick={async () => {
+                      const compact = option.value === 'compact'
+                      setExportDefaultExcelCompactColumns(compact)
+                      await configService.setExportDefaultExcelCompactColumns(compact)
+                      showMessage(compact ? '已启用精简列' : '已启用完整列', true)
+                      setShowExportExcelColumnsSelect(false)
+                    }}
+                  >
+                    <span className="option-label">{option.label}</span>
+                    {option.desc && <span className="option-desc">{option.desc}</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+      </div>
     )
   }
   const renderCacheTab = () => (
@@ -1162,7 +1248,15 @@ function SettingsPage() {
       <div className="form-group">
         <label>缓存目录 <span className="optional">(可选)</span></label>
         <span className="form-hint">留空使用默认目录</span>
-        <input type="text" placeholder="留空使用默认目录" value={cachePath} onChange={(e) => setCachePath(e.target.value)} />
+        <input
+          type="text"
+          placeholder="留空使用默认目录"
+          value={cachePath}
+          onChange={(e) => setCachePath(e.target.value)}
+          onBlur={async () => {
+            await configService.setCachePath(cachePath)
+          }}
+        />
         <div className="btn-row">
           <button className="btn btn-secondary" onClick={handleSelectCachePath}><FolderOpen size={16} /> 浏览选择</button>
           <button className="btn btn-secondary" onClick={() => setCachePath('')}><RotateCcw size={16} /> 恢复默认</button>
@@ -1189,6 +1283,137 @@ function SettingsPage() {
     </div>
   )
 
+  const handleSetupHello = async () => {
+    setIsSettingHello(true)
+    try {
+      const challenge = new Uint8Array(32)
+      window.crypto.getRandomValues(challenge)
+
+      const credential = await navigator.credentials.create({
+        publicKey: {
+          challenge,
+          rp: { name: 'WeFlow', id: 'localhost' },
+          user: { id: new Uint8Array([1]), name: 'user', displayName: 'User' },
+          pubKeyCredParams: [{ alg: -7, type: 'public-key' }],
+          authenticatorSelection: { userVerification: 'required' },
+          timeout: 60000
+        }
+      })
+
+      if (credential) {
+        setAuthUseHello(true)
+        await configService.setAuthUseHello(true)
+        showMessage('Windows Hello 设置成功', true)
+      }
+    } catch (e: any) {
+      if (e.name !== 'NotAllowedError') {
+        showMessage(`Windows Hello 设置失败: ${e.message}`, false)
+      }
+    } finally {
+      setIsSettingHello(false)
+    }
+  }
+
+  const handleUpdatePassword = async () => {
+    if (!newPassword || newPassword !== confirmPassword) {
+      showMessage('两次密码不一致', false)
+      return
+    }
+
+    // 简单的保存逻辑，实际上应该先验证旧密码，但为了简化流程，这里直接允许覆盖
+    // 因为能进入设置页面说明已经解锁了
+    try {
+      const hash = await sha256(newPassword)
+      await configService.setAuthPassword(hash)
+      await configService.setAuthEnabled(true)
+      setAuthEnabled(true)
+      setNewPassword('')
+      setConfirmPassword('')
+      showMessage('密码已更新', true)
+    } catch (e: any) {
+      showMessage('密码更新失败', false)
+    }
+  }
+
+  const renderSecurityTab = () => (
+    <div className="tab-content">
+      <div className="form-group">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <label>启用应用锁</label>
+            <span className="form-hint">每次启动应用时需要验证密码</span>
+          </div>
+          <label className="switch">
+            <input
+              type="checkbox"
+              checked={authEnabled}
+              onChange={async (e) => {
+                const enabled = e.target.checked
+                setAuthEnabled(enabled)
+                await configService.setAuthEnabled(enabled)
+              }}
+            />
+            <span className="switch-slider" />
+          </label>
+        </div>
+      </div>
+
+      <div className="divider" />
+
+      <div className="form-group">
+        <label>重置密码</label>
+        <span className="form-hint">设置新的启动密码</span>
+
+        <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <input
+            type="password"
+            className="field-input"
+            placeholder="新密码"
+            value={newPassword}
+            onChange={e => setNewPassword(e.target.value)}
+          />
+          <div style={{ display: 'flex', gap: 10 }}>
+            <input
+              type="password"
+              className="field-input"
+              placeholder="确认新密码"
+              value={confirmPassword}
+              onChange={e => setConfirmPassword(e.target.value)}
+              style={{ flex: 1 }}
+            />
+            <button className="btn btn-primary" onClick={handleUpdatePassword} disabled={!newPassword}>更新</button>
+          </div>
+        </div>
+      </div>
+
+      <div className="divider" />
+
+      <div className="form-group">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <label>Windows Hello</label>
+            <span className="form-hint">使用面容、指纹快速解锁</span>
+            {!helloAvailable && <div className="form-hint warning" style={{ color: '#ff4d4f' }}> 当前设备不支持 Windows Hello</div>}
+          </div>
+
+          <div>
+            {authUseHello ? (
+              <button className="btn btn-secondary btn-sm" onClick={() => setAuthUseHello(false)}>关闭</button>
+            ) : (
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={handleSetupHello}
+                disabled={!helloAvailable || isSettingHello}
+              >
+                {isSettingHello ? '设置中...' : '开启与设置'}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+
   const renderAboutTab = () => (
     <div className="tab-content about-tab">
       <div className="about-card">
@@ -1204,23 +1429,26 @@ function SettingsPage() {
             <>
               <p className="update-hint">新版 v{updateInfo.version} 可用</p>
               {isDownloading ? (
-                <div className="download-progress">
+                <div className="update-progress">
                   <div className="progress-bar">
-                    <div className="progress-fill" style={{ width: `${downloadProgress}%` }} />
+                    <div className="progress-inner" style={{ width: `${(downloadProgress?.percent || 0)}%` }} />
                   </div>
-                  <span>{downloadProgress.toFixed(0)}%</span>
+                  <span>{(downloadProgress?.percent || 0).toFixed(0)}%</span>
                 </div>
               ) : (
-                <button className="btn btn-primary" onClick={handleUpdateNow}>
+                <button className="btn btn-primary" onClick={() => setShowUpdateDialog(true)}>
                   <Download size={16} /> 立即更新
                 </button>
               )}
             </>
           ) : (
-            <button className="btn btn-secondary" onClick={handleCheckUpdate} disabled={isCheckingUpdate}>
-              <RefreshCw size={16} className={isCheckingUpdate ? 'spin' : ''} />
-              {isCheckingUpdate ? '检查中...' : '检查更新'}
-            </button>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              <button className="btn btn-secondary" onClick={handleCheckUpdate} disabled={isCheckingUpdate}>
+                <RefreshCw size={16} className={isCheckingUpdate ? 'spin' : ''} />
+                {isCheckingUpdate ? '检查中...' : '检查更新'}
+              </button>
+
+            </div>
           )}
         </div>
       </div>
@@ -1276,9 +1504,6 @@ function SettingsPage() {
           <button className="btn btn-secondary" onClick={handleTestConnection} disabled={isLoading || isTesting}>
             <Plug size={16} /> {isTesting ? '测试中...' : '测试连接'}
           </button>
-          <button className="btn btn-primary" onClick={handleSaveConfig} disabled={isLoading}>
-            <Save size={16} /> {isLoading ? '保存中...' : '保存配置'}
-          </button>
         </div>
       </div>
 
@@ -1297,8 +1522,10 @@ function SettingsPage() {
         {activeTab === 'whisper' && renderWhisperTab()}
         {activeTab === 'export' && renderExportTab()}
         {activeTab === 'cache' && renderCacheTab()}
+        {activeTab === 'security' && renderSecurityTab()}
         {activeTab === 'about' && renderAboutTab()}
       </div>
+
     </div>
   )
 }

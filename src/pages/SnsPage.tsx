@@ -1,8 +1,9 @@
-﻿import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
-import { RefreshCw, Heart, Search, Calendar, User, X, Filter, Play, ImageIcon, Zap, Download } from 'lucide-react'
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
+import { RefreshCw, Heart, Search, Calendar, User, X, Filter, Play, ImageIcon, Zap, Download, ChevronRight } from 'lucide-react'
 import { Avatar } from '../components/Avatar'
 import { ImagePreview } from '../components/ImagePreview'
 import JumpToDateDialog from '../components/JumpToDateDialog'
+import { LivePhotoIcon } from '../components/LivePhotoIcon'
 import './SnsPage.scss'
 
 interface SnsPost {
@@ -65,8 +66,7 @@ const MediaItem = ({ media, onPreview }: { media: any, onPreview: () => void }) 
             />
             {isLive && (
                 <div className="live-badge">
-                    <Zap size={10} fill="currentColor" />
-                    <span>LIVE</span>
+                    <LivePhotoIcon size={16} className="live-icon" />
                 </div>
             )}
             <button className="download-btn-overlay" onClick={handleDownload} title="下载原图">
@@ -384,131 +384,19 @@ export default function SnsPage() {
     return (
         <div className="sns-page">
             <div className="sns-container">
-                {/* 侧边栏：过滤与搜索 */}
-                <aside className={`sns-sidebar ${isSidebarOpen ? 'open' : 'closed'}`}>
-                    <div className="sidebar-header">
-                        <div className="title-wrapper">
-                            <Filter size={18} className="title-icon" />
-                            <h3>筛选条件</h3>
-                        </div>
-                        <button className="toggle-btn" onClick={() => setIsSidebarOpen(false)}>
-                            <X size={18} />
-                        </button>
-                    </div>
-
-                    <div className="filter-content custom-scrollbar">
-                        {/* 1. 搜索分组 (放到最顶上) */}
-                        <div className="filter-card">
-                            <div className="filter-section">
-                                <label><Search size={14} /> 关键词搜索</label>
-                                <div className="search-input-wrapper">
-                                    <Search size={14} className="input-icon" />
-                                    <input
-                                        type="text"
-                                        placeholder="搜索动态内容..."
-                                        value={searchKeyword}
-                                        onChange={e => setSearchKeyword(e.target.value)}
-                                    />
-                                    {searchKeyword && (
-                                        <button className="clear-input" onClick={() => setSearchKeyword('')}>
-                                            <X size={14} />
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* 2. 日期跳转 (放搜索下面) */}
-                        <div className="filter-card jump-date-card">
-                            <div className="filter-section">
-                                <label><Calendar size={14} /> 时间跳转</label>
-                                <button className={`jump-date-btn ${jumpTargetDate ? 'active' : ''}`} onClick={() => setShowJumpDialog(true)}>
-                                    <span className="text">
-                                        {jumpTargetDate ? jumpTargetDate.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' }) : '选择跳转日期...'}
-                                    </span>
-                                    <Calendar size={14} className="icon" />
-                                </button>
-                                {jumpTargetDate && (
-                                    <button className="clear-jump-date-inline" onClick={() => setJumpTargetDate(undefined)}>
-                                        返回最新动态
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-
-
-                        {/* 3. 联系人筛选 (放最下面，高度自适应) */}
-                        <div className="filter-card contact-card">
-                            <div className="contact-filter-section">
-                                <div className="section-header">
-                                    <label><User size={14} /> 联系人</label>
-                                    <div className="header-actions">
-                                        {selectedUsernames.length > 0 && (
-                                            <button className="clear-selection-btn" onClick={() => setSelectedUsernames([])}>清除</button>
-                                        )}
-                                        {selectedUsernames.length > 0 && (
-                                            <span className="selected-count">{selectedUsernames.length}</span>
-                                        )}
-                                    </div>
-                                </div>
-                                <div className="contact-search">
-                                    <Search size={12} className="search-icon" />
-                                    <input
-                                        type="text"
-                                        placeholder="搜索好友..."
-                                        value={contactSearch}
-                                        onChange={e => setContactSearch(e.target.value)}
-                                    />
-                                    {contactSearch && (
-                                        <X size={12} className="clear-search-icon" onClick={() => setContactSearch('')} />
-                                    )}
-                                </div>
-                                <div className="contact-list custom-scrollbar">
-                                    {filteredContacts.map(contact => (
-                                        <div
-                                            key={contact.username}
-                                            className={`contact-item ${selectedUsernames.includes(contact.username) ? 'active' : ''}`}
-                                            onClick={() => toggleUserSelection(contact.username)}
-                                        >
-                                            <div className="avatar-wrapper">
-                                                <Avatar src={contact.avatarUrl} name={contact.displayName} size={32} shape="rounded" />
-                                                {selectedUsernames.includes(contact.username) && (
-                                                    <div className="active-badge"></div>
-                                                )}
-                                            </div>
-                                            <span className="contact-name">{contact.displayName}</span>
-                                            <div className="check-box">
-                                                {selectedUsernames.includes(contact.username) && <div className="inner-check"></div>}
-                                            </div>
-                                        </div>
-                                    ))}
-                                    {filteredContacts.length === 0 && (
-                                        <div className="empty-contacts">无可显示联系人</div>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="sidebar-footer">
-                        <button className="clear-btn" onClick={clearFilters}>
-                            <RefreshCw size={14} />
-                            重置所有筛选
-                        </button>
-                    </div>
-                </aside>
-
                 <main className="sns-main">
                     <div className="sns-header">
                         <div className="header-left">
-                            {!isSidebarOpen && (
-                                <button className="icon-btn sidebar-trigger" onClick={() => setIsSidebarOpen(true)}>
-                                    <Filter size={20} />
-                                </button>
-                            )}
                             <h2>社交动态</h2>
                         </div>
                         <div className="header-right">
+                            <button
+                                className={`icon-btn sidebar-trigger ${isSidebarOpen ? 'active' : ''}`}
+                                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                                title={isSidebarOpen ? "收起筛选" : "打开筛选"}
+                            >
+                                <Filter size={18} />
+                            </button>
                             <button
                                 onClick={() => {
                                     if (jumpTargetDate) setJumpTargetDate(undefined);
@@ -516,6 +404,7 @@ export default function SnsPage() {
                                 }}
                                 disabled={loading || loadingNewer}
                                 className="icon-btn refresh-btn"
+                                title="刷新"
                             >
                                 <RefreshCw size={18} className={(loading || loadingNewer) ? 'spinning' : ''} />
                             </button>
@@ -640,6 +529,115 @@ export default function SnsPage() {
                         </div>
                     </div>
                 </main>
+
+                {/* 侧边栏：过滤与搜索 (moved to right) */}
+                <aside className={`sns-sidebar ${isSidebarOpen ? 'open' : 'closed'}`}>
+                    <div className="sidebar-header">
+                        <h3>筛选条件</h3>
+
+                    </div>
+
+                    <div className="filter-content custom-scrollbar">
+                        {/* 1. 搜索分组 (放到最顶上) */}
+                        <div className="filter-card">
+                            <div className="filter-section">
+                                <label><Search size={14} /> 关键词搜索</label>
+                                <div className="search-input-wrapper">
+                                    <Search size={14} className="input-icon" />
+                                    <input
+                                        type="text"
+                                        placeholder="搜索动态内容..."
+                                        value={searchKeyword}
+                                        onChange={e => setSearchKeyword(e.target.value)}
+                                    />
+                                    {searchKeyword && (
+                                        <button className="clear-input" onClick={() => setSearchKeyword('')}>
+                                            <X size={14} />
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 2. 日期跳转 (放搜索下面) */}
+                        <div className="filter-card jump-date-card">
+                            <div className="filter-section">
+                                <label><Calendar size={14} /> 时间跳转</label>
+                                <button className={`jump-date-btn ${jumpTargetDate ? 'active' : ''}`} onClick={() => setShowJumpDialog(true)}>
+                                    <span className="text">
+                                        {jumpTargetDate ? jumpTargetDate.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' }) : '选择跳转日期...'}
+                                    </span>
+                                    <Calendar size={14} className="icon" />
+                                </button>
+                                {jumpTargetDate && (
+                                    <button className="clear-jump-date-inline" onClick={() => setJumpTargetDate(undefined)}>
+                                        返回最新动态
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+
+
+                        {/* 3. 联系人筛选 (放最下面，高度自适应) */}
+                        <div className="filter-card contact-card">
+                            <div className="contact-filter-section">
+                                <div className="section-header">
+                                    <label><User size={14} /> 联系人</label>
+                                    <div className="header-actions">
+                                        {selectedUsernames.length > 0 && (
+                                            <button className="clear-selection-btn" onClick={() => setSelectedUsernames([])}>清除</button>
+                                        )}
+                                        {selectedUsernames.length > 0 && (
+                                            <span className="selected-count">{selectedUsernames.length}</span>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="contact-search">
+                                    <Search size={12} className="search-icon" />
+                                    <input
+                                        type="text"
+                                        placeholder="搜索好友..."
+                                        value={contactSearch}
+                                        onChange={e => setContactSearch(e.target.value)}
+                                    />
+                                    {contactSearch && (
+                                        <X size={12} className="clear-search-icon" onClick={() => setContactSearch('')} />
+                                    )}
+                                </div>
+                                <div className="contact-list custom-scrollbar">
+                                    {filteredContacts.map(contact => (
+                                        <div
+                                            key={contact.username}
+                                            className={`contact-item ${selectedUsernames.includes(contact.username) ? 'active' : ''}`}
+                                            onClick={() => toggleUserSelection(contact.username)}
+                                        >
+                                            <div className="avatar-wrapper">
+                                                <Avatar src={contact.avatarUrl} name={contact.displayName} size={32} shape="rounded" />
+                                                {selectedUsernames.includes(contact.username) && (
+                                                    <div className="active-badge"></div>
+                                                )}
+                                            </div>
+                                            <span className="contact-name">{contact.displayName}</span>
+                                            <div className="check-box">
+                                                {selectedUsernames.includes(contact.username) && <div className="inner-check"></div>}
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {filteredContacts.length === 0 && (
+                                        <div className="empty-contacts">无可显示联系人</div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="sidebar-footer">
+                        <button className="clear-btn" onClick={clearFilters}>
+                            <RefreshCw size={14} />
+                            重置所有筛选
+                        </button>
+                    </div>
+                </aside>
             </div>
             {previewImage && (
                 <ImagePreview src={previewImage} onClose={() => setPreviewImage(null)} />

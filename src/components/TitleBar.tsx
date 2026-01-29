@@ -1,10 +1,14 @@
 import './TitleBar.scss'
 
-function TitleBar() {
+interface TitleBarProps {
+  title?: string
+}
+
+function TitleBar({ title }: TitleBarProps = {}) {
   return (
     <div className="title-bar">
       <img src="./logo.png" alt="WeFlow" className="title-logo" />
-      <span className="titles">WeFlow</span>
+      <span className="titles">{title || 'WeFlow'}</span>
     </div>
   )
 }

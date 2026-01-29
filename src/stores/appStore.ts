@@ -5,15 +5,34 @@ export interface AppState {
   isDbConnected: boolean
   dbPath: string | null
   myWxid: string | null
-  
+
   // 加载状态
   isLoading: boolean
   loadingText: string
-  
+
+  // 更新状态
+  updateInfo: {
+    hasUpdate: boolean
+    version?: string
+    releaseNotes?: string
+  } | null
+  isDownloading: boolean
+  downloadProgress: any
+  showUpdateDialog: boolean
+  updateError: string | null
+
   // 操作
   setDbConnected: (connected: boolean, path?: string) => void
   setMyWxid: (wxid: string) => void
   setLoading: (loading: boolean, text?: string) => void
+
+  // 更新操作
+  setUpdateInfo: (info: any) => void
+  setIsDownloading: (isDownloading: boolean) => void
+  setDownloadProgress: (progress: any) => void
+  setShowUpdateDialog: (show: boolean) => void
+  setUpdateError: (error: string | null) => void
+
   reset: () => void
 }
 
@@ -24,23 +43,41 @@ export const useAppStore = create<AppState>((set) => ({
   isLoading: false,
   loadingText: '',
 
-  setDbConnected: (connected, path) => set({ 
-    isDbConnected: connected, 
-    dbPath: path ?? null 
+  // 更新状态初始化
+  updateInfo: null,
+  isDownloading: false,
+  downloadProgress: { percent: 0 },
+  showUpdateDialog: false,
+  updateError: null,
+
+  setDbConnected: (connected, path) => set({
+    isDbConnected: connected,
+    dbPath: path ?? null
   }),
-  
+
   setMyWxid: (wxid) => set({ myWxid: wxid }),
-  
-  setLoading: (loading, text) => set({ 
-    isLoading: loading, 
-    loadingText: text ?? '' 
+
+  setLoading: (loading, text) => set({
+    isLoading: loading,
+    loadingText: text ?? ''
   }),
-  
+
+  setUpdateInfo: (info) => set({ updateInfo: info, updateError: null }),
+  setIsDownloading: (isDownloading) => set({ isDownloading: isDownloading }),
+  setDownloadProgress: (progress) => set({ downloadProgress: progress }),
+  setShowUpdateDialog: (show) => set({ showUpdateDialog: show }),
+  setUpdateError: (error) => set({ updateError: error }),
+
   reset: () => set({
     isDbConnected: false,
     dbPath: null,
     myWxid: null,
     isLoading: false,
-    loadingText: ''
+    loadingText: '',
+    updateInfo: null,
+    isDownloading: false,
+    downloadProgress: { percent: 0 },
+    showUpdateDialog: false,
+    updateError: null
   })
 }))

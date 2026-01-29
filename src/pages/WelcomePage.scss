@@ -112,7 +112,6 @@
   -webkit-app-region: drag;
 
   [data-mode="dark"] & {
-    background: #18181b;
     border-right-color: rgba(255, 255, 255, 0.08);
   }
 }
@@ -152,7 +151,7 @@
   margin-top: 2px;
 
   [data-mode="dark"] .welcome-sidebar & {
-    color: rgba(255, 255, 255, 0.45);
+    color: rgba(255, 255, 255, 0.6); // 稍微调亮一点
   }
 }
 
@@ -188,7 +187,7 @@
     border-radius: 12px;
 
     [data-mode="dark"] .welcome-sidebar & {
-      opacity: 0.7;
+      opacity: 0.75; // 整体调亮一点，原来是0.7
     }
 
     &.active,
@@ -236,8 +235,8 @@
   transition: all 0.3s ease;
 
   [data-mode="dark"] .welcome-sidebar & {
-    border-color: rgba(255, 255, 255, 0.1);
-    background: rgba(255, 255, 255, 0.03);
+    border-color: rgba(255, 255, 255, 0.2); // 稍微调亮边框
+    background: rgba(255, 255, 255, 0.05);
   }
 
   .nav-item.active & {
@@ -281,7 +280,7 @@
   color: #1a1a1a;
 
   [data-mode="dark"] .welcome-sidebar & {
-    color: #ffffff;
+    color: rgba(255, 255, 255, 0.9); // 提高非活动标题亮度
   }
 
   .nav-item.active & {
@@ -299,7 +298,8 @@
   }
 
   .nav-item.active & {
-    color: rgba(255, 255, 255, 0.85);
+    color: #ffffff; // 活动描述使用纯白
+    font-weight: 500;
   }
 }
 
@@ -315,7 +315,7 @@
   border-top: 1px dashed var(--border-color);
 
   [data-mode="dark"] .welcome-sidebar & {
-    color: rgba(255, 255, 255, 0.5);
+    color: rgba(255, 255, 255, 0.65); // 提高底部文字亮度
     border-top-color: rgba(255, 255, 255, 0.1);
   }
 

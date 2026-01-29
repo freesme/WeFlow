@@ -34,8 +34,8 @@ function AnalyticsWelcomePage() {
                 </div>
                 <h1>私聊数据分析</h1>
                 <p>
-                    WeFlow 可以分析您的聊天记录，生成详细的统计报表。<br />
-                    您可以选择加载上次的分析结果（速度快），或者开始新的分析（数据最新）。
+                    WeFlow 可以分析你的聊天记录，生成详细的统计报表。<br />
+                    你可以选择加载上次的分析结果（速度快），或者开始新的分析（数据最新）。
                 </p>
 
                 <div className="action-cards">

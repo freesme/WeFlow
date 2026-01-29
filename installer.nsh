@@ -47,11 +47,11 @@ ManifestDPIAware true
           DetailPrint "Visual C++ Redistributable 安装成功"
           MessageBox MB_OK|MB_ICONINFORMATION "Visual C++ 运行库安装成功！"
         ${Else}
-          MessageBox MB_OK|MB_ICONEXCLAMATION "Visual C++ 运行库安装失败，您可能需要手动安装。"
+          MessageBox MB_OK|MB_ICONEXCLAMATION "Visual C++ 运行库安装失败，你可能需要手动安装。"
         ${EndIf}
         Delete "$TEMP\vc_redist.x64.exe"
       ${Else}
-        MessageBox MB_OK|MB_ICONEXCLAMATION "下载失败：$0$\n$\n您可以稍后手动下载安装 Visual C++ Redistributable。"
+        MessageBox MB_OK|MB_ICONEXCLAMATION "下载失败：$0$\n$\n你可以稍后手动下载安装 Visual C++ Redistributable。"
       ${EndIf}
       Goto doneVC
     

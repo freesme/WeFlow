@@ -834,92 +834,93 @@
 
 // 链接卡片消息样式
 .link-message {
-  cursor: pointer;
+  width: 280px;
   background: var(--card-bg);
   border-radius: 8px;
   overflow: hidden;
-  border: 1px solid var(--border-color);
+  cursor: pointer;
   transition: all 0.2s ease;
-  max-width: 300px;
-  margin-top: 4px;
+  border: 1px solid var(--border-color);
 
   &:hover {
     background: var(--bg-hover);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    border-color: var(--primary);
   }
 
   .link-header {
+    padding: 10px 12px 6px;
     display: flex;
-    align-items: flex-start;
-    padding: 12px;
-    gap: 12px;
+    gap: 8px;
+
+    .link-title {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-primary);
+      line-height: 1.4;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      flex: 1;
+    }
   }
 
-  .link-content {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .link-title {
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--text-primary);
-    margin-bottom: 4px;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-    line-height: 1.4;
-  }
-
-  .link-desc {
-    font-size: 12px;
-    color: var(--text-secondary);
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-    line-height: 1.4;
-    opacity: 0.8;
-  }
-
-  .link-icon {
-    flex-shrink: 0;
-    width: 40px;
-    height: 40px;
-    background: var(--bg-tertiary);
-    border-radius: 6px;
+  .link-body {
+    padding: 6px 12px 10px;
     display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--text-secondary);
+    gap: 10px;
 
-    svg {
-      opacity: 0.8;
+    .link-desc {
+      font-size: 12px;
+      color: var(--text-secondary);
+      line-height: 1.4;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      flex: 1;
+    }
+
+    .link-thumb {
+      width: 48px;
+      height: 48px;
+      border-radius: 4px;
+      object-fit: cover;
+      flex-shrink: 0;
+      background: var(--bg-tertiary);
+    }
+
+    .link-thumb-placeholder {
+      width: 48px;
+      height: 48px;
+      border-radius: 4px;
+      background: var(--bg-tertiary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      color: var(--text-tertiary);
+
+      svg {
+        opacity: 0.5;
+      }
     }
   }
 }
 
 // 适配发送出去的消息中的链接卡片
 .message-bubble.sent .link-message {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.2);
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
 
-  .link-title,
+  .link-title {
+    color: var(--text-primary);
+  }
+
   .link-desc {
-    color: #fff;
-  }
-
-  .link-icon {
-    background: rgba(255, 255, 255, 0.2);
-    color: #fff;
-  }
-
-  &:hover {
-    background: rgba(255, 255, 255, 0.2);
+    color: var(--text-secondary);
   }
 }
 
@@ -2169,5 +2170,305 @@
 .video-loading {
   .spin {
     animation: spin 1s linear infinite;
+  }
+}
+
+
+// 名片消息
+.card-message {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  min-width: 200px;
+  
+  .card-icon {
+    flex-shrink: 0;
+    color: var(--primary);
+  }
+  
+  .card-info {
+    flex: 1;
+    min-width: 0;
+  }
+  
+  .card-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 2px;
+  }
+  
+  .card-label {
+    font-size: 12px;
+    color: var(--text-tertiary);
+  }
+}
+
+// 通话消息
+.call-message {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  
+  svg {
+    flex-shrink: 0;
+  }
+}
+
+// 文件消息
+// 文件消息
+.file-message {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  min-width: 220px;
+  cursor: pointer;
+  transition: background 0.2s;
+  
+  &:hover {
+    background: var(--bg-hover);
+  }
+  
+  .file-icon {
+    flex-shrink: 0;
+    color: var(--primary);
+  }
+  
+  .file-info {
+    flex: 1;
+    min-width: 0;
+  }
+  
+  .file-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  
+  .file-meta {
+    font-size: 12px;
+    color: var(--text-tertiary);
+  }
+}
+
+// 发送的文件消息样式
+.message-bubble.sent .file-message {
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+
+  .file-name {
+    color: #333;
+  }
+
+  .file-meta {
+    color: #999;
+  }
+}
+
+// 聊天记录消息 - 复用 link-message 基础样式
+.chat-record-message {
+  cursor: pointer;
+  
+  .link-header {
+    padding-bottom: 4px;
+  }
+
+  .chat-record-preview {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .chat-record-meta-line {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .chat-record-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 70px;
+    overflow: hidden;
+  }
+
+  .chat-record-item {
+    font-size: 12px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .source-name {
+    color: var(--text-primary);
+    font-weight: 500;
+    margin-right: 4px;
+  }
+
+  .chat-record-more {
+    font-size: 12px;
+    color: var(--primary);
+  }
+
+  .chat-record-desc {
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  .chat-record-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: var(--primary-gradient);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    flex-shrink: 0;
+  }
+}
+
+// 小程序消息
+.miniapp-message {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  min-width: 200px;
+  
+  .miniapp-icon {
+    flex-shrink: 0;
+    color: var(--primary);
+  }
+  
+  .miniapp-info {
+    flex: 1;
+    min-width: 0;
+  }
+  
+  .miniapp-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  
+  .miniapp-label {
+    font-size: 12px;
+    color: var(--text-tertiary);
+  }
+}
+
+// 转账消息卡片
+.transfer-message {
+  width: 240px;
+  background: linear-gradient(135deg, #f59e42 0%, #f5a742 100%);
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  cursor: default;
+
+  &.received {
+    background: linear-gradient(135deg, #b8b8b8 0%, #a8a8a8 100%);
+  }
+
+  .transfer-icon {
+    flex-shrink: 0;
+
+    svg {
+      width: 32px;
+      height: 32px;
+      filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
+    }
+  }
+
+  .transfer-info {
+    flex: 1;
+    color: white;
+
+    .transfer-amount {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 2px;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    }
+
+    .transfer-memo {
+      font-size: 13px;
+      margin-bottom: 8px;
+      opacity: 0.95;
+    }
+
+    .transfer-label {
+      font-size: 12px;
+      opacity: 0.85;
+    }
+  }
+}
+
+// 发送消息中的特殊消息类型适配（除了文件和转账）
+.message-bubble.sent {
+  .card-message,
+  .chat-record-message,
+  .miniapp-message {
+    background: rgba(255, 255, 255, 0.15);
+    
+    .card-name,
+    .miniapp-title,
+    .source-name {
+      color: white;
+    }
+    
+    .card-label,
+    .miniapp-label,
+    .chat-record-item,
+    .chat-record-meta-line,
+    .chat-record-desc {
+      color: rgba(255, 255, 255, 0.8);
+    }
+    
+    .card-icon,
+    .miniapp-icon,
+    .chat-record-icon {
+      color: white;
+    }
+    
+    .chat-record-more {
+      color: rgba(255, 255, 255, 0.9);
+    }
+  }
+  
+  .call-message {
+    color: rgba(255, 255, 255, 0.9);
+    
+    svg {
+      color: white;
+    }
   }
 }

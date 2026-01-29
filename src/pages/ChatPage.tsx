@@ -22,6 +22,15 @@ function isSystemMessage(localType: number): boolean {
   return SYSTEM_MESSAGE_TYPES.includes(localType)
 }
 
+// 格式化文件大小
+function formatFileSize(bytes: number): string {
+  if (bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
+}
+
 interface ChatPageProps {
   // 保留接口以备将来扩展
 }
@@ -1476,6 +1485,9 @@ function MessageBubble({ message, session, showTime, myAvatarUrl, isGroupChat, o
   const isImage = message.localType === 3
   const isVideo = message.localType === 43
   const isVoice = message.localType === 34
+  const isCard = message.localType === 42
+  const isCall = message.localType === 50
+  const isType49 = message.localType === 49
   const isSent = message.isSend === 1
   const [senderAvatarUrl, setSenderAvatarUrl] = useState<string | undefined>(undefined)
   const [senderName, setSenderName] = useState<string | undefined>(undefined)
@@ -2438,6 +2450,268 @@ function MessageBubble({ message, session, showTime, myAvatarUrl, isGroupChat, o
       )
     }
 
+    // 名片消息
+    if (isCard) {
+      const cardName = message.cardNickname || message.cardUsername || '未知联系人'
+      return (
+        <div className="card-message">
+          <div className="card-icon">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+              <circle cx="12" cy="7" r="4" />
+            </svg>
+          </div>
+          <div className="card-info">
+            <div className="card-name">{cardName}</div>
+            <div className="card-label">个人名片</div>
+          </div>
+        </div>
+      )
+    }
+
+    // 通话消息
+    if (isCall) {
+      return (
+        <div className="call-message">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+          </svg>
+          <span>{message.parsedContent || '[通话]'}</span>
+        </div>
+      )
+    }
+
+    // 链接消息 (AppMessage)
+    const isAppMsg = message.rawContent?.includes('<appmsg') || (message.parsedContent && message.parsedContent.includes('<appmsg'))
+
+    if (isAppMsg) {
+      let title = '链接'
+      let desc = ''
+      let url = ''
+      let appMsgType = ''
+
+      try {
+        const content = message.rawContent || message.parsedContent || ''
+        // 简单清理 XML 前缀（如 wxid:）
+        const xmlContent = content.substring(content.indexOf('<msg>'))
+
+        const parser = new DOMParser()
+        const doc = parser.parseFromString(xmlContent, 'text/xml')
+
+        title = doc.querySelector('title')?.textContent || '链接'
+        desc = doc.querySelector('des')?.textContent || ''
+        url = doc.querySelector('url')?.textContent || ''
+        appMsgType = doc.querySelector('appmsg > type')?.textContent || doc.querySelector('type')?.textContent || ''
+      } catch (e) {
+        console.error('解析 AppMsg 失败:', e)
+      }
+
+      // 聊天记录 (type=19)
+      if (appMsgType === '19') {
+        const recordList = message.chatRecordList || []
+        const displayTitle = title || '群聊的聊天记录'
+        const metaText =
+          recordList.length > 0
+            ? `共 ${recordList.length} 条聊天记录`
+            : desc || '聊天记录'
+
+        const previewItems = recordList.slice(0, 4)
+
+        return (
+          <div
+            className="link-message chat-record-message"
+            onClick={(e) => {
+              e.stopPropagation()
+              // 打开聊天记录窗口
+              window.electronAPI.window.openChatHistoryWindow(session.username, message.localId)
+            }}
+            title="点击查看详细聊天记录"
+          >
+            <div className="link-header">
+              <div className="link-title" title={displayTitle}>
+                {displayTitle}
+              </div>
+            </div>
+            <div className="link-body">
+              <div className="chat-record-preview">
+                {previewItems.length > 0 ? (
+                  <>
+                    <div className="chat-record-meta-line" title={metaText}>
+                      {metaText}
+                    </div>
+                    <div className="chat-record-list">
+                      {previewItems.map((item, i) => (
+                        <div key={i} className="chat-record-item">
+                          <span className="source-name">
+                            {item.sourcename ? `${item.sourcename}: ` : ''}
+                          </span>
+                          {item.datadesc || item.datatitle || '[媒体消息]'}
+                        </div>
+                      ))}
+                      {recordList.length > previewItems.length && (
+                        <div className="chat-record-more">还有 {recordList.length - previewItems.length} 条…</div>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <div className="chat-record-desc">
+                    {desc || '点击打开查看完整聊天记录'}
+                  </div>
+                )}
+              </div>
+              <div className="chat-record-icon">
+                <MessageSquare size={18} />
+              </div>
+            </div>
+          </div>
+        )
+      }
+
+      // 文件消息 (type=6)
+      if (appMsgType === '6') {
+        const fileName = message.fileName || title || '文件'
+        const fileSize = message.fileSize
+        const fileExt = message.fileExt || fileName.split('.').pop()?.toLowerCase() || ''
+        
+        // 根据扩展名选择图标
+        const getFileIcon = () => {
+          const archiveExts = ['zip', 'rar', '7z', 'tar', 'gz', 'bz2']
+          if (archiveExts.includes(fileExt)) {
+            return (
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+            )
+          }
+          return (
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+              <polyline points="13 2 13 9 20 9" />
+            </svg>
+          )
+        }
+        
+        return (
+          <div className="file-message">
+            <div className="file-icon">
+              {getFileIcon()}
+            </div>
+            <div className="file-info">
+              <div className="file-name" title={fileName}>{fileName}</div>
+              <div className="file-meta">
+                {fileSize ? formatFileSize(fileSize) : ''}
+              </div>
+            </div>
+          </div>
+        )
+      }
+
+      // 转账消息 (type=2000)
+      if (appMsgType === '2000') {
+        try {
+          const content = message.rawContent || message.content || message.parsedContent || ''
+          
+          // 添加调试日志
+          console.log('[Transfer Debug] Raw content:', content.substring(0, 500))
+          
+          const parser = new DOMParser()
+          const doc = parser.parseFromString(content, 'text/xml')
+
+          const feedesc = doc.querySelector('feedesc')?.textContent || ''
+          const payMemo = doc.querySelector('pay_memo')?.textContent || ''
+          const paysubtype = doc.querySelector('paysubtype')?.textContent || '1'
+
+          console.log('[Transfer Debug] Parsed:', { feedesc, payMemo, paysubtype, title })
+
+          // paysubtype: 1=待收款, 3=已收款
+          const isReceived = paysubtype === '3'
+          
+          // 如果 feedesc 为空，使用 title 作为降级
+          const displayAmount = feedesc || title || '微信转账'
+
+          return (
+            <div className={`transfer-message ${isReceived ? 'received' : ''}`}>
+              <div className="transfer-icon">
+                <svg width="32" height="32" viewBox="0 0 40 40" fill="none">
+                  <circle cx="20" cy="20" r="18" stroke="white" strokeWidth="2" />
+                  <path d="M12 20h16M20 12l8 8-8 8" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
+              <div className="transfer-info">
+                <div className="transfer-amount">{displayAmount}</div>
+                {payMemo && <div className="transfer-memo">{payMemo}</div>}
+                <div className="transfer-label">{isReceived ? '已收款' : '微信转账'}</div>
+              </div>
+            </div>
+          )
+        } catch (e) {
+          console.error('[Transfer Debug] Parse error:', e)
+          // 解析失败时的降级处理
+          const feedesc = title || '微信转账'
+          return (
+            <div className="transfer-message">
+              <div className="transfer-icon">
+                <svg width="32" height="32" viewBox="0 0 40 40" fill="none">
+                  <circle cx="20" cy="20" r="18" stroke="white" strokeWidth="2" />
+                  <path d="M12 20h16M20 12l8 8-8 8" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
+              <div className="transfer-info">
+                <div className="transfer-amount">{feedesc}</div>
+                <div className="transfer-label">微信转账</div>
+              </div>
+            </div>
+          )
+        }
+      }
+
+      // 小程序 (type=33/36)
+      if (appMsgType === '33' || appMsgType === '36') {
+        return (
+          <div className="miniapp-message">
+            <div className="miniapp-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+              </svg>
+            </div>
+            <div className="miniapp-info">
+              <div className="miniapp-title">{title}</div>
+              <div className="miniapp-label">小程序</div>
+            </div>
+          </div>
+        )
+      }
+
+      // 有 URL 的链接消息
+      if (url) {
+        return (
+          <div
+            className="link-message"
+            onClick={(e) => {
+              e.stopPropagation()
+              if (window.electronAPI?.shell?.openExternal) {
+                window.electronAPI.shell.openExternal(url)
+              } else {
+                window.open(url, '_blank')
+              }
+            }}
+          >
+            <div className="link-header">
+              <div className="link-title" title={title}>{title}</div>
+            </div>
+            <div className="link-body">
+              <div className="link-desc" title={desc}>{desc}</div>
+              <div className="link-thumb-placeholder">
+                <Link size={24} />
+              </div>
+            </div>
+          </div>
+        )
+      }
+    }
+
     // 表情包消息
     if (isEmoji) {
       // ... (keep existing emoji logic)
@@ -2492,67 +2766,6 @@ function MessageBubble({ message, session, showTime, myAvatarUrl, isGroupChat, o
       )
     }
 
-    // 解析引用消息（Links / App Messages）
-    // localType: 21474836529 corresponds to AppMessage which often contains links
-    if (isLinkMessage) {
-      try {
-        // 清理内容：移除可能的 wxid 前缀，找到 XML 起始位置
-        let contentToParse = message.rawContent || message.parsedContent || '';
-        const xmlStartIndex = contentToParse.indexOf('<');
-        if (xmlStartIndex >= 0) {
-          contentToParse = contentToParse.substring(xmlStartIndex);
-        }
-
-        // 处理 HTML 转义字符
-        if (contentToParse.includes('&lt;')) {
-          contentToParse = contentToParse
-            .replace(/&lt;/g, '<')
-            .replace(/&gt;/g, '>')
-            .replace(/&amp;/g, '&')
-            .replace(/&quot;/g, '"')
-            .replace(/&apos;/g, "'");
-        }
-
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(contentToParse, "text/xml");
-        const appMsg = doc.querySelector('appmsg');
-
-        if (appMsg) {
-          const title = doc.querySelector('title')?.textContent || '未命名链接';
-          const des = doc.querySelector('des')?.textContent || '无描述';
-          const url = doc.querySelector('url')?.textContent || '';
-
-          return (
-            <div
-              className="link-message"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (url) {
-                  // 优先使用 electron 接口打开外部浏览器
-                  if (window.electronAPI?.shell?.openExternal) {
-                    window.electronAPI.shell.openExternal(url);
-                  } else {
-                    window.open(url, '_blank');
-                  }
-                }
-              }}
-            >
-              <div className="link-header">
-                <div className="link-content">
-                  <div className="link-title" title={title}>{title}</div>
-                  <div className="link-desc" title={des}>{des}</div>
-                </div>
-                <div className="link-icon">
-                  <Link size={24} />
-                </div>
-              </div>
-            </div>
-          );
-        }
-      } catch (e) {
-        console.error('Failed to parse app message', e);
-      }
-    }
     // 普通消息
     return <div className="bubble-content">{renderTextWithEmoji(cleanMessageContent(message.parsedContent))}</div>
   }

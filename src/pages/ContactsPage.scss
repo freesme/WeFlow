@@ -111,52 +111,59 @@
 
   .type-filters {
     display: flex;
-    gap: 12px;
-    padding: 0 20px 12px;
+    gap: 8px;
+    padding: 0 20px 16px;
     flex-wrap: nowrap;
     overflow-x: auto;
-    /* Allow horizontal scroll if needed on very small screens */
 
-    /* Hide scrollbar */
     &::-webkit-scrollbar {
       display: none;
     }
 
-    .filter-checkbox {
+    .filter-chip {
       display: flex;
-      /* Changed to flex with padding */
       align-items: center;
-      gap: 8px;
+      gap: 6px;
+      padding: 8px 14px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
       cursor: pointer;
       user-select: none;
-      font-size: 14px;
-      color: var(--text-primary);
-      padding: 6px 12px;
-      background: var(--bg-secondary);
-      border-radius: 8px;
-      transition: all 0.2s;
-
-      &:hover {
-        background: var(--bg-hover);
-      }
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      transition: all 0.2s ease;
+      white-space: nowrap;
 
       input[type="checkbox"] {
-        width: 16px;
-        height: 16px;
-        accent-color: var(--primary);
-        cursor: pointer;
-        opacity: 1;
-        /* Make visible */
-        position: static;
-        /* Make static */
-        pointer-events: auto;
-        /* Enable pointer events */
+        display: none;
       }
 
       svg {
-        color: var(--text-secondary);
-        flex-shrink: 0;
-        margin-left: 2px;
+        opacity: 0.7;
+        transition: transform 0.2s;
+      }
+
+      &:hover {
+        background: var(--bg-hover);
+        border-color: var(--text-tertiary);
+        color: var(--text-primary);
+
+        svg {
+          transform: translateY(-1px);
+        }
+      }
+
+      &.active {
+        background: var(--primary-light);
+        border-color: var(--primary);
+        color: var(--primary);
+
+        svg {
+          opacity: 1;
+          color: var(--primary);
+        }
       }
     }
   }

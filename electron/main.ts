@@ -1,3 +1,4 @@
+import './preload-env'
 import { app, BrowserWindow, ipcMain, nativeTheme, session } from 'electron'
 import { Worker } from 'worker_threads'
 import { join, dirname } from 'path'
@@ -368,6 +369,66 @@ function createVideoPlayerWindow(videoPath: string, videoWidth?: number, videoHe
   return win
 }
 
+/**
+ * 创建独立的聊天记录窗口
+ */
+function createChatHistoryWindow(sessionId: string, messageId: number) {
+  const isDev = !!process.env.VITE_DEV_SERVER_URL
+  const iconPath = isDev
+    ? join(__dirname, '../public/icon.ico')
+    : join(process.resourcesPath, 'icon.ico')
+
+  // 根据系统主题设置窗口背景色
+  const isDark = nativeTheme.shouldUseDarkColors
+
+  const win = new BrowserWindow({
+    width: 600,
+    height: 800,
+    minWidth: 400,
+    minHeight: 500,
+    icon: iconPath,
+    webPreferences: {
+      preload: join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false
+    },
+    titleBarStyle: 'hidden',
+    titleBarOverlay: {
+      color: '#00000000',
+      symbolColor: isDark ? '#ffffff' : '#1a1a1a',
+      height: 32
+    },
+    show: false,
+    backgroundColor: isDark ? '#1A1A1A' : '#F0F0F0',
+    autoHideMenuBar: true
+  })
+
+  win.once('ready-to-show', () => {
+    win.show()
+  })
+
+  if (process.env.VITE_DEV_SERVER_URL) {
+    win.loadURL(`${process.env.VITE_DEV_SERVER_URL}#/chat-history/${sessionId}/${messageId}`)
+
+    win.webContents.on('before-input-event', (event, input) => {
+      if (input.key === 'F12' || (input.control && input.shift && input.key === 'I')) {
+        if (win.webContents.isDevToolsOpened()) {
+          win.webContents.closeDevTools()
+        } else {
+          win.webContents.openDevTools()
+        }
+        event.preventDefault()
+      }
+    })
+  } else {
+    win.loadFile(join(__dirname, '../dist/index.html'), {
+      hash: `/chat-history/${sessionId}/${messageId}`
+    })
+  }
+
+  return win
+}
+
 function showMainWindow() {
   shouldShowMain = true
   if (mainWindowReady) {
@@ -474,7 +535,7 @@ function registerIpcHandlers() {
 
     // 监听下载进度
     autoUpdater.on('download-progress', (progress) => {
-      win?.webContents.send('app:downloadProgress', progress.percent)
+      win?.webContents.send('app:downloadProgress', progress)
     })
 
     // 下载完成后自动安装
@@ -527,6 +588,12 @@ function registerIpcHandlers() {
   // 打开视频播放窗口
   ipcMain.handle('window:openVideoPlayerWindow', (_, videoPath: string, videoWidth?: number, videoHeight?: number) => {
     createVideoPlayerWindow(videoPath, videoWidth, videoHeight)
+  })
+
+  // 打开聊天记录窗口
+  ipcMain.handle('window:openChatHistoryWindow', (_, sessionId: string, messageId: number) => {
+    createChatHistoryWindow(sessionId, messageId)
+    return true
   })
 
   // 根据视频尺寸调整窗口大小
@@ -697,7 +764,7 @@ function registerIpcHandlers() {
     })
   })
 
-  ipcMain.handle('chat:getMessageById', async (_, sessionId: string, localId: number) => {
+  ipcMain.handle('chat:getMessage', async (_, sessionId: string, localId: number) => {
     return chatService.getMessageById(sessionId, localId)
   })
 

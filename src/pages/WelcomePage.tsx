@@ -15,7 +15,8 @@ const steps = [
   { id: 'db', title: '数据库目录', desc: '定位 xwechat_files 目录' },
   { id: 'cache', title: '缓存目录', desc: '设置本地缓存存储位置（可选）' },
   { id: 'key', title: '解密密钥', desc: '获取密钥与自动识别账号' },
-  { id: 'image', title: '图片密钥', desc: '获取 XOR 与 AES 密钥' }
+  { id: 'image', title: '图片密钥', desc: '获取 XOR 与 AES 密钥' },
+  { id: 'security', title: '安全防护', desc: '保护你的数据' }
 ]
 
 interface WelcomePageProps {
@@ -45,6 +46,64 @@ function WelcomePage({ standalone = false }: WelcomePageProps) {
   const [dbKeyStatus, setDbKeyStatus] = useState('')
   const [imageKeyStatus, setImageKeyStatus] = useState('')
   const [isManualStartPrompt, setIsManualStartPrompt] = useState(false)
+
+  // 安全相关 state
+  const [enableAuth, setEnableAuth] = useState(false)
+  const [authPassword, setAuthPassword] = useState('')
+  const [authConfirmPassword, setAuthConfirmPassword] = useState('')
+  const [enableHello, setEnableHello] = useState(false)
+  const [helloAvailable, setHelloAvailable] = useState(false)
+  const [isSettingHello, setIsSettingHello] = useState(false)
+
+  // 检查 Hello 可用性
+  useEffect(() => {
+    if (window.PublicKeyCredential) {
+      void PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().then(setHelloAvailable)
+    }
+  }, [])
+
+  async function sha256(message: string) {
+    const msgBuffer = new TextEncoder().encode(message)
+    const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer)
+    const hashArray = Array.from(new Uint8Array(hashBuffer))
+    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+    return hashHex
+  }
+
+  const handleSetupHello = async () => {
+    setIsSettingHello(true)
+    try {
+      // 注册凭证 (WebAuthn)
+      const challenge = new Uint8Array(32)
+      window.crypto.getRandomValues(challenge)
+
+      const credential = await navigator.credentials.create({
+        publicKey: {
+          challenge,
+          rp: { name: 'WeFlow', id: 'localhost' },
+          user: {
+            id: new Uint8Array([1]),
+            name: 'user',
+            displayName: 'User'
+          },
+          pubKeyCredParams: [{ alg: -7, type: 'public-key' }],
+          authenticatorSelection: { userVerification: 'required' },
+          timeout: 60000
+        }
+      })
+
+      if (credential) {
+        setEnableHello(true)
+        // 成功提示?
+      }
+    } catch (e: any) {
+      if (e.name !== 'NotAllowedError') {
+        setError('Windows Hello 设置失败: ' + e.message)
+      }
+    } finally {
+      setIsSettingHello(false)
+    }
+  }
 
   useEffect(() => {
     const removeDb = window.electronAPI.key.onDbKeyStatus((payload) => {
@@ -227,6 +286,12 @@ function WelcomePage({ standalone = false }: WelcomePageProps) {
     if (currentStep.id === 'cache') return true
     if (currentStep.id === 'key') return decryptKey.length === 64 && Boolean(wxid)
     if (currentStep.id === 'image') return true
+    if (currentStep.id === 'security') {
+      if (enableAuth) {
+        return authPassword.length > 0 && authPassword === authConfirmPassword
+      }
+      return true
+    }
     return false
   }
 
@@ -277,6 +342,15 @@ function WelcomePage({ standalone = false }: WelcomePageProps) {
         imageXorKey: typeof parsedXorKey === 'number' && !Number.isNaN(parsedXorKey) ? parsedXorKey : 0,
         imageAesKey
       })
+
+      // 保存安全配置
+      if (enableAuth && authPassword) {
+        const hash = await sha256(authPassword)
+        await configService.setAuthEnabled(true)
+        await configService.setAuthPassword(hash)
+        await configService.setAuthUseHello(enableHello)
+      }
+
       await configService.setOnboardingDone(true)
 
       setDbConnected(true, dbPath)
@@ -450,7 +524,7 @@ function WelcomePage({ standalone = false }: WelcomePageProps) {
 
                 <div className="field-hint">请选择微信-设置-存储位置对应的目录</div>
                 <div className="field-hint warning">
-                  ⚠️ 目录路径不可包含中文，如有中文请先在微信中迁移至全英文目录
+                  目录路径不可包含中文，如有中文请先在微信中迁移至全英文目录
                 </div>
               </div>
             )}
@@ -525,6 +599,74 @@ function WelcomePage({ standalone = false }: WelcomePageProps) {
               </div>
             )}
 
+            {currentStep.id === 'security' && (
+              <div className="form-group">
+                <div className="security-toggle-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                  <div className="toggle-info">
+                    <label className="field-label" style={{ marginBottom: 0 }}>启用应用锁</label>
+                    <div className="field-hint">每次启动应用时需要验证密码</div>
+                  </div>
+                  <label className="switch">
+                    <input type="checkbox" checked={enableAuth} onChange={e => setEnableAuth(e.target.checked)} />
+                    <span className="switch-slider" />
+                  </label>
+                </div>
+
+                {enableAuth && (
+                  <div className="security-settings" style={{ marginTop: 20, padding: 16, backgroundColor: 'var(--bg-secondary)', borderRadius: 8 }}>
+                    <div className="form-group">
+                      <label className="field-label">应用密码</label>
+                      <input
+                        type="password"
+                        className="field-input"
+                        placeholder="请输入密码"
+                        value={authPassword}
+                        onChange={e => setAuthPassword(e.target.value)}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="field-label">确认密码</label>
+                      <input
+                        type="password"
+                        className="field-input"
+                        placeholder="请再次输入密码"
+                        value={authConfirmPassword}
+                        onChange={e => setAuthConfirmPassword(e.target.value)}
+                      />
+                      {authPassword && authConfirmPassword && authPassword !== authConfirmPassword && (
+                        <div className="error-text" style={{ color: '#ff4d4f', fontSize: 12, marginTop: 4 }}>两次密码不一致</div>
+                      )}
+                    </div>
+
+                    <div className="divider" style={{ margin: '20px 0', borderTop: '1px solid var(--border-color)' }}></div>
+
+                    <div className="security-toggle-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div className="toggle-info">
+                        <label className="field-label" style={{ marginBottom: 0 }}>Windows Hello</label>
+                        <div className="field-hint">使用面容、指纹或 PIN 码快速解锁</div>
+                      </div>
+
+                      {enableHello ? (
+                        <div style={{ color: '#52c41a', display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <CheckCircle2 size={16} /> 已开启
+                          <button className="btn btn-ghost btn-sm" onClick={() => setEnableHello(false)} style={{ padding: '2px 8px', height: 24, fontSize: 12 }}>关闭</button>
+                        </div>
+                      ) : (
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          disabled={!helloAvailable || isSettingHello}
+                          onClick={handleSetupHello}
+                        >
+                          {isSettingHello ? '设置中...' : (helloAvailable ? '点击开启' : '不可用')}
+                        </button>
+                      )}
+                    </div>
+                    {!helloAvailable && <div className="field-hint warning"> 当前设备不支持 Windows Hello 或未设置 PIN 码</div>}
+                  </div>
+                )}
+              </div>
+            )}
+
             {currentStep.id === 'image' && (
               <div className="form-group">
                 <div className="grid-2">
@@ -564,8 +706,8 @@ function WelcomePage({ standalone = false }: WelcomePageProps) {
 
           {currentStep.id === 'intro' && (
             <div className="intro-footer">
-              <p>接下来的几个步骤将引导您连接本地微信数据库。</p>
-              <p>WeFlow 需要访问您的本地数据文件以提供分析与导出功能。</p>
+              <p>接下来的几个步骤将引导你连接本地微信数据库。</p>
+              <p>WeFlow 需要访问你的本地数据文件以提供分析与导出功能。</p>
             </div>
           )}
 

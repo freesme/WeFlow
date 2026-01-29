@@ -224,7 +224,7 @@ function ContactsPage() {
                 </div>
 
                 <div className="type-filters">
-                    <label className="filter-checkbox">
+                    <label className={`filter-chip ${contactTypes.friends ? 'active' : ''}`}>
                         <input
                             type="checkbox"
                             checked={contactTypes.friends}
@@ -233,7 +233,7 @@ function ContactsPage() {
                         <User size={16} />
                         <span>好友</span>
                     </label>
-                    <label className="filter-checkbox">
+                    <label className={`filter-chip ${contactTypes.groups ? 'active' : ''}`}>
                         <input
                             type="checkbox"
                             checked={contactTypes.groups}
@@ -242,7 +242,7 @@ function ContactsPage() {
                         <Users size={16} />
                         <span>群聊</span>
                     </label>
-                    <label className="filter-checkbox">
+                    <label className={`filter-chip ${contactTypes.officials ? 'active' : ''}`}>
                         <input
                             type="checkbox"
                             checked={contactTypes.officials}

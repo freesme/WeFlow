@@ -24,6 +24,7 @@ interface ExportOptions {
   excelCompactColumns: boolean
   txtColumns: string[]
   displayNamePreference: 'group-nickname' | 'remark' | 'nickname'
+  exportConcurrency: number
 }
 
 interface ExportResult {
@@ -68,7 +69,8 @@ function ExportPage() {
     exportVoiceAsText: true,
     excelCompactColumns: true,
     txtColumns: defaultTxtColumns,
-    displayNamePreference: 'remark'
+    displayNamePreference: 'remark',
+    exportConcurrency: 2
   })
 
   const buildDateRangeFromPreset = (preset: string) => {
@@ -133,14 +135,16 @@ function ExportPage() {
         savedMedia,
         savedVoiceAsText,
         savedExcelCompactColumns,
-        savedTxtColumns
+        savedTxtColumns,
+        savedConcurrency
       ] = await Promise.all([
         configService.getExportDefaultFormat(),
         configService.getExportDefaultDateRange(),
         configService.getExportDefaultMedia(),
         configService.getExportDefaultVoiceAsText(),
         configService.getExportDefaultExcelCompactColumns(),
-        configService.getExportDefaultTxtColumns()
+        configService.getExportDefaultTxtColumns(),
+        configService.getExportDefaultConcurrency()
       ])
 
       const preset = savedRange || 'today'
@@ -155,7 +159,8 @@ function ExportPage() {
         exportMedia: savedMedia ?? false,
         exportVoiceAsText: savedVoiceAsText ?? true,
         excelCompactColumns: savedExcelCompactColumns ?? true,
-        txtColumns
+        txtColumns,
+        exportConcurrency: savedConcurrency ?? 2
       }))
     } catch (e) {
       console.error('加载导出默认设置失败:', e)
@@ -286,6 +291,7 @@ function ExportPage() {
         excelCompactColumns: options.excelCompactColumns,
         txtColumns: options.txtColumns,
         displayNamePreference: options.displayNamePreference,
+        exportConcurrency: options.exportConcurrency,
         sessionLayout,
         dateRange: options.useAllTime ? null : options.dateRange ? {
           start: Math.floor(options.dateRange.start.getTime() / 1000),
@@ -531,21 +537,34 @@ function ExportPage() {
 
           <div className="setting-section">
             <h3>时间范围</h3>
-            <div className="time-options">
-              <label className="checkbox-item">
-                <input
-                  type="checkbox"
-                  checked={options.useAllTime}
-                  onChange={e => setOptions({ ...options, useAllTime: e.target.checked })}
-                />
-                <span>导出全部时间</span>
-              </label>
-              {!options.useAllTime && options.dateRange && (
-                <div className="date-range" onClick={() => setShowDatePicker(true)}>
-                  <Calendar size={16} />
-                  <span>{formatDate(options.dateRange.start)} - {formatDate(options.dateRange.end)}</span>
-                  <ChevronDown size={14} />
+            <p className="setting-subtitle">选择要导出的消息时间区间</p>
+            <div className="media-options-card">
+              <div className="media-switch-row">
+                <div className="media-switch-info">
+                  <span className="media-switch-title">导出全部时间</span>
+                  <span className="media-switch-desc">关闭此项以选择特定的起止日期</span>
                 </div>
+                <label className="switch">
+                  <input
+                    type="checkbox"
+                    checked={options.useAllTime}
+                    onChange={e => setOptions({ ...options, useAllTime: e.target.checked })}
+                  />
+                  <span className="switch-slider"></span>
+                </label>
+              </div>
+
+              {!options.useAllTime && options.dateRange && (
+                <>
+                  <div className="media-option-divider"></div>
+                  <div className="time-range-picker-item" onClick={() => setShowDatePicker(true)}>
+                    <div className="time-picker-info">
+                      <Calendar size={16} />
+                      <span>{formatDate(options.dateRange.start)} - {formatDate(options.dateRange.end)}</span>
+                    </div>
+                    <ChevronDown size={14} />
+                  </div>
+                </>
               )}
             </div>
           </div>
@@ -603,7 +622,7 @@ function ExportPage() {
                     checked={options.exportMedia}
                     onChange={e => setOptions({ ...options, exportMedia: e.target.checked })}
                   />
-                  <span className="slider"></span>
+                  <span className="switch-slider"></span>
                 </label>
               </div>
 
@@ -683,7 +702,7 @@ function ExportPage() {
                     checked={options.exportAvatars}
                     onChange={e => setOptions({ ...options, exportAvatars: e.target.checked })}
                   />
-                  <span className="slider"></span>
+                  <span className="switch-slider"></span>
                 </label>
               </div>
             </div>

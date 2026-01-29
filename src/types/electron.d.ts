@@ -11,6 +11,7 @@ export interface ElectronAPI {
     setTitleBarOverlay: (options: { symbolColor: string }) => void
     openVideoPlayerWindow: (videoPath: string, videoWidth?: number, videoHeight?: number) => Promise<void>
     resizeToFitVideo: (videoWidth: number, videoHeight: number) => Promise<void>
+    openChatHistoryWindow: (sessionId: string, messageId: number) => Promise<boolean>
   }
   config: {
     get: (key: string) => Promise<unknown>
@@ -106,6 +107,7 @@ export interface ElectronAPI {
     getVoiceTranscript: (sessionId: string, msgId: string, createTime?: number) => Promise<{ success: boolean; transcript?: string; error?: string }>
     onVoiceTranscriptPartial: (callback: (payload: { msgId: string; text: string }) => void) => () => void
     execQuery: (kind: string, path: string | null, sql: string) => Promise<{ success: boolean; rows?: any[]; error?: string }>
+    getMessage: (sessionId: string, localId: number) => Promise<{ success: boolean; message?: Message; error?: string }>
   }
 
   image: {
@@ -343,9 +345,25 @@ export interface ElectronAPI {
         createTime: number
         contentDesc: string
         type?: number
-        media: Array<{ url: string; thumb: string }>
+        media: Array<{
+          url: string
+          thumb: string
+          md5?: string
+          token?: string
+          key?: string
+          encIdx?: string
+          livePhoto?: {
+            url: string
+            thumb: string
+            md5?: string
+            token?: string
+            key?: string
+            encIdx?: string
+          }
+        }>
         likes: Array<string>
         comments: Array<{ id: string; nickname: string; content: string; refCommentId: string; refNickname?: string }>
+        rawXml?: string
       }>
       error?: string
     }>
@@ -367,6 +385,7 @@ export interface ExportOptions {
   txtColumns?: string[]
   sessionLayout?: 'shared' | 'per-session'
   displayNamePreference?: 'group-nickname' | 'remark' | 'nickname'
+  exportConcurrency?: number
 }
 
 export interface ExportProgress {

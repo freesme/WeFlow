@@ -10,6 +10,7 @@ import { wcdbService } from './wcdbService'
 import { imageDecryptService } from './imageDecryptService'
 import { chatService } from './chatService'
 import { videoService } from './videoService'
+import { voiceTranscribeService } from './voiceTranscribeService'
 import { EXPORT_HTML_STYLES } from './exportHtmlStyles'
 
 // ChatLab 格式类型定义
@@ -78,6 +79,7 @@ export interface ExportOptions {
   txtColumns?: string[]
   sessionLayout?: 'shared' | 'per-session'
   displayNamePreference?: 'group-nickname' | 'remark' | 'nickname'
+  exportConcurrency?: number
 }
 
 const TXT_COLUMN_DEFINITIONS: Array<{ id: string; label: string }> = [
@@ -290,7 +292,7 @@ class ExportService {
           extBuffer = Buffer.from(extBuffer, 'base64')
         } else {
           // 默认尝试hex
-          console.log('⚠️ 无法判断编码格式，默认尝试hex')
+          console.log(' 无法判断编码格式，默认尝试hex')
           try {
             extBuffer = Buffer.from(extBuffer, 'hex')
           } catch (e) {
@@ -1032,15 +1034,15 @@ class ExportService {
   /**
    * 转写语音为文字
    */
-  private async transcribeVoice(sessionId: string, msgId: string): Promise<string> {
+  private async transcribeVoice(sessionId: string, msgId: string, createTime: number, senderWxid: string | null): Promise<string> {
     try {
-      const transcript = await chatService.getVoiceTranscript(sessionId, msgId)
+      const transcript = await chatService.getVoiceTranscript(sessionId, msgId, createTime, undefined, senderWxid || undefined)
       if (transcript.success && transcript.transcript) {
         return `[语音转文字] ${transcript.transcript}`
       }
-      return '[语音消息 - 转文字失败]'
+      return `[语音消息 - 转文字失败: ${transcript.error || '未知错误'}]`
     } catch (e) {
-      return '[语音消息 - 转文字失败]'
+      return `[语音消息 - 转文字失败: ${String(e)}]`
     }
   }
 
@@ -1288,6 +1290,7 @@ class ExportService {
   ): Promise<{ rows: any[]; memberSet: Map<string, { member: ChatLabMember; avatarUrl?: string }>; firstTime: number | null; lastTime: number | null }> {
     const rows: any[] = []
     const memberSet = new Map<string, { member: ChatLabMember; avatarUrl?: string }>()
+    const senderSet = new Set<string>()
     let firstTime: number | null = null
     let lastTime: number | null = null
 
@@ -1321,16 +1324,7 @@ class ExportService {
           const localId = parseInt(row.local_id || row.localId || '0', 10)
 
           const actualSender = isSend ? cleanedMyWxid : (senderUsername || sessionId)
-          const memberInfo = await this.getContactInfo(actualSender)
-          if (!memberSet.has(actualSender)) {
-            memberSet.set(actualSender, {
-              member: {
-                platformId: actualSender,
-                accountName: memberInfo.displayName
-              },
-              avatarUrl: memberInfo.avatarUrl
-            })
-          }
+          senderSet.add(actualSender)
 
           // 提取媒体相关字段
           let imageMd5: string | undefined
@@ -1373,6 +1367,30 @@ class ExportService {
       }
     } finally {
       await wcdbService.closeMessageCursor(cursor.cursor)
+    }
+
+    if (senderSet.size > 0) {
+      const usernames = Array.from(senderSet)
+      const [nameResult, avatarResult] = await Promise.all([
+        wcdbService.getDisplayNames(usernames),
+        wcdbService.getAvatarUrls(usernames)
+      ])
+
+      const nameMap = nameResult.success && nameResult.map ? nameResult.map : {}
+      const avatarMap = avatarResult.success && avatarResult.map ? avatarResult.map : {}
+
+      for (const username of usernames) {
+        const displayName = nameMap[username] || username
+        const avatarUrl = avatarMap[username]
+        memberSet.set(username, {
+          member: {
+            platformId: username,
+            accountName: displayName
+          },
+          avatarUrl
+        })
+        this.contactCache.set(username, { displayName, avatarUrl })
+      }
     }
 
     return { rows, memberSet, firstTime, lastTime }
@@ -1663,6 +1681,10 @@ class ExportService {
         phase: 'preparing'
       })
 
+      if (options.exportVoiceAsText) {
+        await this.ensureVoiceModel(onProgress)
+      }
+
       const collected = await this.collectMessages(sessionId, cleanedMyWxid, options.dateRange)
       const allMessages = collected.rows
 
@@ -1733,7 +1755,7 @@ class ExportService {
         // 并行转写语音，限制 4 个并发（转写比较耗资源）
         const VOICE_CONCURRENCY = 4
         await parallelLimit(voiceMessages, VOICE_CONCURRENCY, async (msg) => {
-          const transcript = await this.transcribeVoice(sessionId, String(msg.localId))
+          const transcript = await this.transcribeVoice(sessionId, String(msg.localId), msg.createTime, msg.senderUsername)
           voiceTranscriptMap.set(msg.localId, transcript)
         })
       }
@@ -1856,12 +1878,26 @@ class ExportService {
       const sessionInfo = await this.getContactInfo(sessionId)
       const myInfo = await this.getContactInfo(cleanedMyWxid)
 
+      const contactCache = new Map<string, { success: boolean; contact?: any; error?: string }>()
+      const getContactCached = async (username: string) => {
+        if (contactCache.has(username)) {
+          return contactCache.get(username)!
+        }
+        const result = await wcdbService.getContact(username)
+        contactCache.set(username, result)
+        return result
+      }
+
       onProgress?.({
         current: 0,
         total: 100,
         currentSession: sessionInfo.displayName,
         phase: 'preparing'
       })
+
+      if (options.exportVoiceAsText) {
+        await this.ensureVoiceModel(onProgress)
+      }
 
       const collected = await this.collectMessages(sessionId, cleanedMyWxid, options.dateRange)
 
@@ -1924,7 +1960,7 @@ class ExportService {
 
         const VOICE_CONCURRENCY = 4
         await parallelLimit(voiceMessages, VOICE_CONCURRENCY, async (msg) => {
-          const transcript = await this.transcribeVoice(sessionId, String(msg.localId))
+          const transcript = await this.transcribeVoice(sessionId, String(msg.localId), msg.createTime, msg.senderUsername)
           voiceTranscriptMap.set(msg.localId, transcript)
         })
       }
@@ -1962,7 +1998,7 @@ class ExportService {
 
         // 获取发送者信息用于名称显示
         const senderWxid = msg.senderUsername
-        const contact = await wcdbService.getContact(senderWxid)
+        const contact = await getContactCached(senderWxid)
         const senderNickname = contact.success && contact.contact?.nickName
           ? contact.contact.nickName
           : (senderInfo.displayName || senderWxid)
@@ -2005,7 +2041,7 @@ class ExportService {
       const { chatlab, meta } = this.getExportMeta(sessionId, sessionInfo, isGroup)
 
       // 获取会话的昵称和备注信息
-      const sessionContact = await wcdbService.getContact(sessionId)
+      const sessionContact = await getContactCached(sessionId)
       const sessionNickname = sessionContact.success && sessionContact.contact?.nickName
         ? sessionContact.contact.nickName
         : sessionInfo.displayName
@@ -2098,8 +2134,18 @@ class ExportService {
       const sessionInfo = await this.getContactInfo(sessionId)
       const myInfo = await this.getContactInfo(cleanedMyWxid)
 
+      const contactCache = new Map<string, { success: boolean; contact?: any; error?: string }>()
+      const getContactCached = async (username: string) => {
+        if (contactCache.has(username)) {
+          return contactCache.get(username)!
+        }
+        const result = await wcdbService.getContact(username)
+        contactCache.set(username, result)
+        return result
+      }
+
       // 获取会话的备注信息
-      const sessionContact = await wcdbService.getContact(sessionId)
+      const sessionContact = await getContactCached(sessionId)
       const sessionRemark = sessionContact.success && sessionContact.contact?.remark ? sessionContact.contact.remark : ''
       const sessionNickname = sessionContact.success && sessionContact.contact?.nickName ? sessionContact.contact.nickName : sessionId
 
@@ -2109,6 +2155,10 @@ class ExportService {
         currentSession: sessionInfo.displayName,
         phase: 'preparing'
       })
+
+      if (options.exportVoiceAsText) {
+        await this.ensureVoiceModel(onProgress)
+      }
 
       const collected = await this.collectMessages(sessionId, cleanedMyWxid, options.dateRange)
 
@@ -2228,11 +2278,11 @@ class ExportService {
       }
 
       // 预加载群昵称 (仅群聊且完整列模式)
-      console.log('🔍 预加载群昵称检查: isGroup=', isGroup, 'useCompactColumns=', useCompactColumns, 'sessionId=', sessionId)
+      console.log('预加载群昵称检查: isGroup=', isGroup, 'useCompactColumns=', useCompactColumns, 'sessionId=', sessionId)
       const groupNicknamesMap = (isGroup && !useCompactColumns)
         ? await this.getGroupNicknamesForRoom(sessionId)
         : new Map<string, string>()
-      console.log('🔍 群昵称Map大小:', groupNicknamesMap.size)
+      console.log('群昵称Map大小:', groupNicknamesMap.size)
 
 
       // 填充数据
@@ -2293,7 +2343,7 @@ class ExportService {
 
         const VOICE_CONCURRENCY = 4
         await parallelLimit(voiceMessages, VOICE_CONCURRENCY, async (msg) => {
-          const transcript = await this.transcribeVoice(sessionId, String(msg.localId))
+          const transcript = await this.transcribeVoice(sessionId, String(msg.localId), msg.createTime, msg.senderUsername)
           voiceTranscriptMap.set(msg.localId, transcript)
         })
       }
@@ -2328,7 +2378,7 @@ class ExportService {
           senderWxid = msg.senderUsername
 
           // 用 getContact 获取联系人详情，分别取昵称和备注
-          const contactDetail = await wcdbService.getContact(msg.senderUsername)
+          const contactDetail = await getContactCached(msg.senderUsername)
           if (contactDetail.success && contactDetail.contact) {
             // nickName 才是真正的昵称
             senderNickname = contactDetail.contact.nickName || msg.senderUsername
@@ -2343,7 +2393,7 @@ class ExportService {
         } else {
           // 单聊对方消息 - 用 getContact 获取联系人详情
           senderWxid = sessionId
-          const contactDetail = await wcdbService.getContact(sessionId)
+          const contactDetail = await getContactCached(sessionId)
           if (contactDetail.success && contactDetail.contact) {
             senderNickname = contactDetail.contact.nickName || sessionId
             senderRemark = contactDetail.contact.remark || ''
@@ -2364,12 +2414,15 @@ class ExportService {
         const row = worksheet.getRow(currentRow)
         row.height = 24
 
-        const contentValue = this.formatPlainExportContent(
-          msg.content,
-          msg.localType,
-          options,
-          voiceTranscriptMap.get(msg.localId)
-        )
+        const mediaKey = `${msg.localType}_${msg.localId}`
+        const mediaItem = mediaCache.get(mediaKey)
+        const contentValue = mediaItem?.relativePath
+          || this.formatPlainExportContent(
+            msg.content,
+            msg.localType,
+            options,
+            voiceTranscriptMap.get(msg.localId)
+          )
 
         // 调试日志
         if (msg.localType === 3 || msg.localType === 47) {
@@ -2444,6 +2497,41 @@ class ExportService {
   }
 
   /**
+    * 确保语音转写模型已下载
+    */
+  private async ensureVoiceModel(onProgress?: (progress: ExportProgress) => void): Promise<boolean> {
+    try {
+      const status = await voiceTranscribeService.getModelStatus()
+      if (status.success && status.exists) {
+        return true
+      }
+
+      onProgress?.({
+        current: 0,
+        total: 100,
+        currentSession: '正在下载 AI 模型',
+        phase: 'preparing'
+      })
+
+      const downloadResult = await voiceTranscribeService.downloadModel((progress: any) => {
+        if (progress.percent !== undefined) {
+          onProgress?.({
+            current: progress.percent,
+            total: 100,
+            currentSession: `正在下载 AI 模型 (${progress.percent.toFixed(0)}%)`,
+            phase: 'preparing'
+          })
+        }
+      })
+
+      return downloadResult.success
+    } catch (e) {
+      console.error('Auto download model failed:', e)
+      return false
+    }
+  }
+
+  /**
    * 导出单个会话为 TXT 格式（默认与 Excel 精简列一致）
    */
   async exportSessionToTxt(
@@ -2467,6 +2555,10 @@ class ExportService {
         currentSession: sessionInfo.displayName,
         phase: 'preparing'
       })
+
+      if (options.exportVoiceAsText) {
+        await this.ensureVoiceModel(onProgress)
+      }
 
       const collected = await this.collectMessages(sessionId, cleanedMyWxid, options.dateRange)
 
@@ -2527,7 +2619,7 @@ class ExportService {
 
         const VOICE_CONCURRENCY = 4
         await parallelLimit(voiceMessages, VOICE_CONCURRENCY, async (msg) => {
-          const transcript = await this.transcribeVoice(sessionId, String(msg.localId))
+          const transcript = await this.transcribeVoice(sessionId, String(msg.localId), msg.createTime, msg.senderUsername)
           voiceTranscriptMap.set(msg.localId, transcript)
         })
       }
@@ -2543,12 +2635,15 @@ class ExportService {
 
       for (let i = 0; i < sortedMessages.length; i++) {
         const msg = sortedMessages[i]
-        const contentValue = this.formatPlainExportContent(
-          msg.content,
-          msg.localType,
-          options,
-          voiceTranscriptMap.get(msg.localId)
-        )
+        const mediaKey = `${msg.localType}_${msg.localId}`
+        const mediaItem = mediaCache.get(mediaKey)
+        const contentValue = mediaItem?.relativePath
+          || this.formatPlainExportContent(
+            msg.content,
+            msg.localType,
+            options,
+            voiceTranscriptMap.get(msg.localId)
+          )
 
         let senderRole: string
         let senderWxid: string
@@ -2561,7 +2656,7 @@ class ExportService {
           senderNickname = myInfo.displayName || cleanedMyWxid
         } else if (isGroup && msg.senderUsername) {
           senderWxid = msg.senderUsername
-          const contactDetail = await wcdbService.getContact(msg.senderUsername)
+          const contactDetail = await getContactCached(msg.senderUsername)
           if (contactDetail.success && contactDetail.contact) {
             senderNickname = contactDetail.contact.nickName || msg.senderUsername
             senderRemark = contactDetail.contact.remark || ''
@@ -2572,7 +2667,7 @@ class ExportService {
           }
         } else {
           senderWxid = sessionId
-          const contactDetail = await wcdbService.getContact(sessionId)
+          const contactDetail = await getContactCached(sessionId)
           if (contactDetail.success && contactDetail.contact) {
             senderNickname = contactDetail.contact.nickName || sessionId
             senderRemark = contactDetail.contact.remark || ''
@@ -2645,6 +2740,10 @@ class ExportService {
         phase: 'preparing'
       })
 
+      if (options.exportVoiceAsText) {
+        await this.ensureVoiceModel(onProgress)
+      }
+
       const collected = await this.collectMessages(sessionId, cleanedMyWxid, options.dateRange)
 
       // 如果没有消息,不创建文件
@@ -2711,7 +2810,7 @@ class ExportService {
 
         const VOICE_CONCURRENCY = 4
         await parallelLimit(voiceMessages, VOICE_CONCURRENCY, async (msg) => {
-          const transcript = await this.transcribeVoice(sessionId, String(msg.localId))
+          const transcript = await this.transcribeVoice(sessionId, String(msg.localId), msg.createTime, msg.senderUsername)
           voiceTranscriptMap.set(msg.localId, transcript)
         })
       }
@@ -2999,13 +3098,20 @@ class ExportService {
       const sessionLayout = exportMediaEnabled
         ? (options.sessionLayout ?? 'per-session')
         : 'shared'
+      let completedCount = 0
+      const rawConcurrency = typeof options.exportConcurrency === 'number'
+        ? Math.floor(options.exportConcurrency)
+        : 2
+      const clampedConcurrency = Math.max(1, Math.min(rawConcurrency, 6))
+      const sessionConcurrency = (exportMediaEnabled && sessionLayout === 'shared')
+        ? 1
+        : clampedConcurrency
 
-      for (let i = 0; i < sessionIds.length; i++) {
-        const sessionId = sessionIds[i]
+      await parallelLimit(sessionIds, sessionConcurrency, async (sessionId) => {
         const sessionInfo = await this.getContactInfo(sessionId)
 
         onProgress?.({
-          current: i + 1,
+          current: completedCount,
           total: sessionIds.length,
           currentSession: sessionInfo.displayName,
           phase: 'exporting'
@@ -3047,7 +3153,15 @@ class ExportService {
           failCount++
           console.error(`导出 ${sessionId} 失败:`, result.error)
         }
-      }
+
+        completedCount++
+        onProgress?.({
+          current: completedCount,
+          total: sessionIds.length,
+          currentSession: sessionInfo.displayName,
+          phase: 'exporting'
+        })
+      })
 
       onProgress?.({
         current: sessionIds.length,

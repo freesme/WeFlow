@@ -603,54 +603,7 @@
   }
 }
 
-.switch {
-  position: relative;
-  width: 46px;
-  height: 24px;
-  display: inline-block;
-  user-select: none;
-}
-
-.switch-input {
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-.switch-slider {
-  position: absolute;
-  cursor: pointer;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-  border-radius: 999px;
-  transition: all 0.2s ease;
-}
-
-.switch-slider::before {
-  content: '';
-  position: absolute;
-  height: 18px;
-  width: 18px;
-  left: 3px;
-  top: 2px;
-  background: var(--text-tertiary);
-  border-radius: 50%;
-  transition: all 0.2s ease;
-}
-
-.switch-input:checked+.switch-slider {
-  background: var(--primary);
-  border-color: var(--primary);
-}
-
-.switch-input:checked+.switch-slider::before {
-  transform: translateX(22px);
-  background: #ffffff;
-}
+// 全局样式已在 main.scss 中定义
 
 .log-actions {
   display: flex;
