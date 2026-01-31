@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   release:
-    runs-on: windows-2022
+    runs-on: windows-latest
 
     steps:
       - name: Check out git repository
@@ -21,30 +21,8 @@ jobs:
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20.20.0
+          node-version: 22.12
           cache: 'npm'
-
-      - name: Configure Windows SDK WinMD
-        shell: powershell
-        run: |
-          $sdkRoot = Join-Path ${env:ProgramFiles(x86)} "Windows Kits\\10"
-          $unionRoot = Join-Path $sdkRoot "UnionMetadata"
-          $refsRoot = Join-Path $sdkRoot "References"
-          if (!(Test-Path $unionRoot)) { throw "UnionMetadata not found at $unionRoot" }
-          $platformWinmd = Get-ChildItem $unionRoot -Recurse -Filter platform.winmd -ErrorAction SilentlyContinue |
-            Sort-Object FullName -Descending | Select-Object -First 1
-          if (!$platformWinmd) { throw "platform.winmd not found under $unionRoot" }
-          $platformDir = Split-Path $platformWinmd.FullName -Parent
-          $versionDir = $platformWinmd.Directory.Name
-          $refsDir = Join-Path $refsRoot $versionDir
-          if (!(Test-Path $refsDir)) {
-            $refsDir = Get-ChildItem $refsRoot -Directory | Sort-Object Name -Descending | Select-Object -First 1
-          }
-          if (!$refsDir) { throw "No References version directory found" }
-          $libPath = "$platformDir;$($refsDir.FullName)"
-          Add-Content -Path $env:GITHUB_ENV -Value "LIBPATH=$libPath" -Encoding utf8
-          Add-Content -Path $env:GITHUB_ENV -Value "WindowsSdkDir=$sdkRoot\\" -Encoding utf8
-          Add-Content -Path $env:GITHUB_ENV -Value "WindowsSdkVersion=$versionDir\\" -Encoding utf8
 
       - name: Install Dependencies
         run: npm ci

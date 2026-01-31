@@ -1,6 +1,6 @@
 {
   "name": "weflow",
-  "version": "1.4.2",
+  "version": "1.4.3",
   "description": "WeFlow",
   "main": "dist-electron/main.js",
   "author": "cc",
@@ -15,7 +15,6 @@
     "electron:build": "npm run build"
   },
   "dependencies": {
-    "@nodert-win10-rs4/windows.security.credentials.ui": "^0.4.4",
     "better-sqlite3": "^12.5.0",
     "echarts": "^5.5.1",
     "echarts-for-react": "^3.0.2",
